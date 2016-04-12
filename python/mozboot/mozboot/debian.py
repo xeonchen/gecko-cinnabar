@@ -50,6 +50,8 @@ class DebianBootstrapper(BaseBootstrapper):
     # (browser) for all Debian-derived distros (such as Ubuntu).
     BROWSER_COMMON_PACKAGES = [
         'libasound2-dev',
+        'libavahi-client-dev',
+        'libavahi-common-dev',
         'libcurl4-openssl-dev',
         'libdbus-1-dev',
         'libdbus-glib-1-dev',
