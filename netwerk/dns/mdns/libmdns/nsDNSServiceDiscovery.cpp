@@ -4,14 +4,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsDNSServiceDiscovery.h"
-#include "MDNSResponderOperator.h"
 #include "nsICancelable.h"
+#include "nsThreadUtils.h"
 #include "nsXULAppAPI.h"
 #include "private/pprio.h"
 
 #ifdef MOZ_WIDGET_GONK
-#include <cutils/properties.h>
-#endif // MOZ_WIDGET_GONK
+  #include <cutils/properties.h>
+  #include "MDNSResponderOperator.h"
+#elif defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_QT)
+  #include "AvahiOperator.h"
+#endif
 
 namespace mozilla {
 namespace net {
@@ -78,7 +81,9 @@ protected:
 uint32_t ServiceCounter::sUseCount = 0;
 
 class DiscoveryRequest final : public nsICancelable
+#ifdef MOZ_WIDGET_GONK
                              , private ServiceCounter
+#endif // MOZ_WIDGET_GONK
 {
 public:
   NS_DECL_ISUPPORTS

@@ -33,6 +33,22 @@ elif CONFIG['MOZ_WIDGET_TOOLKIT'] == 'cocoa' or \
                 'external/mdnsresponder/mDNSShared',
             ]
         ]
+elif CONFIG['MOZ_WIDGET_TOOLKIT'] in ('gtk2', 'gtk3', 'qt'):
+    UNIFIED_SOURCES += [
+        'AvahiOperator.cpp',
+        'nsDNSServiceDiscovery.cpp'
+    ]
+
+    CXXFLAGS += [
+        '-fPIC',
+    ]
+
+    OS_LIBS += [
+        'avahi-client',
+        'avahi-common'
+    ]
+
+    USE_STATIC_LIBS = True
 
 UNIFIED_SOURCES += [
     'nsDNSServiceInfo.cpp',
