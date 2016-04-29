@@ -8,7 +8,6 @@
 #define mozilla_dom_TVIPCService_h
 
 #include "mozilla/Tuple.h"
-#include "nsITVService.h"
 #include "nsTArray.h"
 #include "TVTypes.h"
 

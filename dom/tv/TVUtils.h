@@ -135,6 +135,18 @@ ToTVChannelType(const nsAString& aStr)
   return TVChannelType::EndGuard_;
 }
 
+inline nsString
+ToTVChannelTypeStr(const TVChannelType aChannelType)
+{
+  MOZ_ASSERT(static_cast<uint32_t>(aChannelType) <
+             ArrayLength(TVChannelTypeValues::strings));
+
+  nsString str;
+  str.AssignASCII(
+    TVChannelTypeValues::strings[static_cast<uint32_t>(aChannelType)].value);
+  return str;
+}
+
 } // namespace dom
 } // namespace mozilla
 

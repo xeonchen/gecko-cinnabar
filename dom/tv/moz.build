@@ -54,6 +54,7 @@ IPDL_SOURCES += [
 
 if CONFIG['MOZ_WIDGET_TOOLKIT'] == 'gonk':
     UNIFIED_SOURCES += [
+        'gonk/DTVInterface.cpp',
         'gonk/RegistryInterface.cpp',
         'gonk/TVDaemonInterface.cpp',
         'gonk/TVGonkService.cpp',

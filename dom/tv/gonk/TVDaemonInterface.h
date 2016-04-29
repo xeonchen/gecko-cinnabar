@@ -37,6 +37,7 @@ using mozilla::UniquePtr;
 
 class TVDaemonProtocol;
 class RegistryInterface;
+class DTVInterface;
 
 /**
  * This class is the result-handler interface for the TV
@@ -151,6 +152,13 @@ public:
    */
   RegistryInterface* GetTVRegistryInterface();
 
+  /**
+   * Returns the DTV interface for the connected TV backend.
+   *
+   * @return An instance of the TV DTV interface.
+   */
+  DTVInterface* GetTVDTVInterface();
+
 private:
   class StartDaemonTask;
 
@@ -177,6 +185,7 @@ private:
   UniquePtr<TVDaemonProtocol> mProtocol;
 
   UniquePtr<RegistryInterface> mRegistryInterface;
+  UniquePtr<DTVInterface> mDTVInterface;
 
   nsTArray<RefPtr<TVDaemonResultHandler> > mResultHandlerQ;
   RefPtr<TVDaemonNotificationHandler> mNotificationHandler;

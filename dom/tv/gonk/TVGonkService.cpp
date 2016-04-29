@@ -15,6 +15,93 @@
 namespace mozilla {
 namespace dom {
 
+class GonkDTVNotificationHandler final : public DTVNotificationHandler
+{
+public:
+  void OnChannelScanned(const nsAString& aTunerId, const nsAString& aSourceType,
+                        struct ChannelData aChannelMsgData) override
+  {
+    MOZ_ASSERT(NS_IsMainThread());
+
+    nsCOMPtr<nsITVService> service = do_GetService(TV_SERVICE_CONTRACTID);
+    if (NS_WARN_IF(!service)) {
+      return;
+    }
+
+    nsCOMPtr<nsITVChannelData> channelData;
+    channelData = do_CreateInstance(TV_CHANNEL_DATA_CONTRACTID);
+    PackChannelData(channelData, aChannelMsgData);
+
+    nsresult rv =
+      static_cast<TVGonkService*>(service.get())
+        ->NotifyChannelScanned(aTunerId, aSourceType, channelData.get());
+    NS_WARN_IF(NS_FAILED(rv));
+  }
+
+  void OnChannelScanComplete(const nsAString& aTunerId,
+                             const nsAString& aSourceType) override
+  {
+    MOZ_ASSERT(NS_IsMainThread());
+
+    nsCOMPtr<nsITVService> service = do_GetService(TV_SERVICE_CONTRACTID);
+    if (NS_WARN_IF(!service)) {
+      return;
+    }
+
+    nsresult rv = static_cast<TVGonkService*>(service.get())
+                    ->NotifyChannelScanComplete(aTunerId, aSourceType);
+    NS_WARN_IF(NS_FAILED(rv));
+  }
+
+  void OnChannelScanStopped(const nsAString& aTunerId,
+                            const nsAString& aSourceType) override
+  {
+    MOZ_ASSERT(NS_IsMainThread());
+
+    nsCOMPtr<nsITVService> service = do_GetService(TV_SERVICE_CONTRACTID);
+    if (NS_WARN_IF(!service)) {
+      return;
+    }
+
+    nsresult rv = static_cast<TVGonkService*>(service.get())
+                    ->NotifyChannelScanStopped(aTunerId, aSourceType);
+    NS_WARN_IF(NS_FAILED(rv));
+  }
+
+  void OnEITBroadcasted(const nsAString& aTunerId, const nsAString& aSourceType,
+                        struct ChannelData aChannelMsgData,
+                        const nsTArray<struct ProgramData>& aProgramDataList)
+    override
+  {
+    MOZ_ASSERT(NS_IsMainThread());
+
+    nsCOMPtr<nsITVService> service = do_GetService(TV_SERVICE_CONTRACTID);
+    if (NS_WARN_IF(!service)) {
+      return;
+    }
+
+    nsCOMPtr<nsITVChannelData> channelData;
+    channelData = do_CreateInstance(TV_CHANNEL_DATA_CONTRACTID);
+    PackChannelData(channelData, aChannelMsgData);
+
+    uint32_t length = aProgramDataList.Length();
+    nsCOMArray<nsITVProgramData> programDataList(length);
+    for (uint32_t i = 0; i < length; i++) {
+      nsCOMPtr<nsITVProgramData> programData;
+      programData = do_CreateInstance(TV_PROGRAM_DATA_CONTRACTID);
+      PackProgramData(programData, aProgramDataList[i]);
+      programDataList.AppendElement(programData);
+    }
+
+    nsresult rv =
+      static_cast<TVGonkService*>(service.get())->NotifyEITBroadcasted(
+        aTunerId, aSourceType, channelData.get(),
+        const_cast<nsITVProgramData**>(programDataList.Elements()), length);
+    NS_WARN_IF(NS_FAILED(rv));
+  }
+};
+
+
 class DisconnectResultHandler final : public TVDaemonResultHandler
 {
 public:
@@ -72,7 +159,22 @@ public:
 
   void RegisterModule() override
   {
-    // TODO
+    DTVInterface* dTVInterface = mInterface->GetTVDTVInterface();
+    if (!dTVInterface) {
+      Disconnect();
+      return;
+    }
+    dTVInterface->SetNotificationHandler(new GonkDTVNotificationHandler());
+  }
+
+  void UnregisterModule() override
+  {
+    DTVInterface* dTVInterface = mInterface->GetTVDTVInterface();
+    if (!dTVInterface) {
+      Disconnect();
+      return;
+    }
+    dTVInterface->SetNotificationHandler(nullptr);
   }
 
   void Disconnect()
@@ -108,7 +210,15 @@ public:
   void Connect() override
   {
     MOZ_ASSERT(NS_IsMainThread());
-    // TODO Register service here.
+
+    // Init, step 2: register DTV service
+    RegistryInterface* registryInterface = mInterface->GetTVRegistryInterface();
+    if (!registryInterface) {
+      return;
+    }
+    registryInterface->RegisterModule(
+      DTVModule::SERVICE_ID,
+      new TVRegisterModuleResultHandler(mInterface));
   }
 
 private:
@@ -164,6 +274,13 @@ TVGonkService::~TVGonkService()
   if (!mInterface) {
     return;
   }
+  RegistryInterface* registryInterface = mInterface->GetTVRegistryInterface();
+  if (registryInterface) {
+    registryInterface->UnregisterModule(
+      DTVModule::SERVICE_ID,
+      new TVRegisterModuleResultHandler(mInterface));
+  }
+
   mInterface->Disconnect(new DisconnectResultHandler(mInterface));
 }
 
@@ -225,9 +342,14 @@ TVGonkService::GetSourceListeners(
 TVGonkService::GetTuners(nsITVServiceCallback* aCallback)
 {
   MOZ_ASSERT(aCallback);
+  MOZ_ASSERT(mInterface);
 
-  // TODO Bug 1229308 - Communicate with TV daemon process.
+  DTVInterface* daemonInterface = mInterface->GetTVDTVInterface();
+  if (NS_WARN_IF(!daemonInterface)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
 
+  daemonInterface->GetTuners(new DTVResultHandler(aCallback));
   return NS_OK;
 }
 
@@ -239,9 +361,15 @@ TVGonkService::SetSource(const nsAString& aTunerId,
   MOZ_ASSERT(!aTunerId.IsEmpty());
   MOZ_ASSERT(!aSourceType.IsEmpty());
   MOZ_ASSERT(aCallback);
+  MOZ_ASSERT(mInterface);
 
-  // TODO Bug 1229308 - Communicate with TV daemon process.
+  DTVInterface* daemonInterface = mInterface->GetTVDTVInterface();
+  if (NS_WARN_IF(!daemonInterface)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
 
+  daemonInterface->SetSource(aTunerId, aSourceType,
+                             new DTVResultHandler(aCallback));
   return NS_OK;
 }
 
@@ -253,9 +381,15 @@ TVGonkService::StartScanningChannels(const nsAString& aTunerId,
   MOZ_ASSERT(!aTunerId.IsEmpty());
   MOZ_ASSERT(!aSourceType.IsEmpty());
   MOZ_ASSERT(aCallback);
+  MOZ_ASSERT(mInterface);
 
-  // TODO Bug 1229308 - Communicate with TV daemon process.
+  DTVInterface* daemonInterface = mInterface->GetTVDTVInterface();
+  if (NS_WARN_IF(!daemonInterface)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
 
+  daemonInterface->StartScanningChannels(aTunerId, aSourceType,
+                                         new DTVResultHandler(aCallback));
   return NS_OK;
 }
 
@@ -267,17 +401,29 @@ TVGonkService::StopScanningChannels(const nsAString& aTunerId,
   MOZ_ASSERT(!aTunerId.IsEmpty());
   MOZ_ASSERT(!aSourceType.IsEmpty());
   MOZ_ASSERT(aCallback);
+  MOZ_ASSERT(mInterface);
 
-  // TODO Bug 1229308 - Communicate with TV daemon process.
+  DTVInterface* daemonInterface = mInterface->GetTVDTVInterface();
+  if (NS_WARN_IF(!daemonInterface)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
 
+  daemonInterface->StopScanningChannels(aTunerId, aSourceType,
+                                        new DTVResultHandler(aCallback));
   return NS_OK;
 }
 
 /* virtual */ NS_IMETHODIMP
 TVGonkService::ClearScannedChannelsCache()
 {
-  // TODO Bug 1229308 - Communicate with TV daemon process.
+  MOZ_ASSERT(mInterface);
 
+  DTVInterface* daemonInterface = mInterface->GetTVDTVInterface();
+  if (NS_WARN_IF(!daemonInterface)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  daemonInterface->ClearScannedChannelsCache(new DTVResultHandler(nullptr));
   return NS_OK;
 }
 
@@ -290,9 +436,15 @@ TVGonkService::SetChannel(const nsAString& aTunerId,
   MOZ_ASSERT(!aTunerId.IsEmpty());
   MOZ_ASSERT(!aSourceType.IsEmpty());
   MOZ_ASSERT(aCallback);
+  MOZ_ASSERT(mInterface);
 
-  // TODO Bug 1229308 - Communicate with TV daemon process.
+  DTVInterface* daemonInterface = mInterface->GetTVDTVInterface();
+  if (NS_WARN_IF(!daemonInterface)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
 
+  daemonInterface->SetChannel(aTunerId, aSourceType, aChannelNumber,
+                              new DTVResultHandler(aCallback));
   return NS_OK;
 }
 
@@ -304,9 +456,15 @@ TVGonkService::GetChannels(const nsAString& aTunerId,
   MOZ_ASSERT(!aTunerId.IsEmpty());
   MOZ_ASSERT(!aSourceType.IsEmpty());
   MOZ_ASSERT(aCallback);
+  MOZ_ASSERT(mInterface);
 
-  // TODO Bug 1229308 - Communicate with TV daemon process.
+  DTVInterface* daemonInterface = mInterface->GetTVDTVInterface();
+  if (NS_WARN_IF(!daemonInterface)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
 
+  daemonInterface->GetChannels(aTunerId, aSourceType,
+                               new DTVResultHandler(aCallback));
   return NS_OK;
 }
 
@@ -320,8 +478,96 @@ TVGonkService::GetPrograms(const nsAString& aTunerId,
   MOZ_ASSERT(!aSourceType.IsEmpty());
   MOZ_ASSERT(!aChannelNumber.IsEmpty());
   MOZ_ASSERT(aCallback);
+  MOZ_ASSERT(mInterface);
 
-  // TODO Bug 1229308 - Communicate with TV daemon process.
+  DTVInterface* daemonInterface = mInterface->GetTVDTVInterface();
+  if (NS_WARN_IF(!daemonInterface)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+  daemonInterface->GetPrograms(aTunerId, aSourceType, aChannelNumber, startTime,
+                               endTime, new DTVResultHandler(aCallback));
+
+  return NS_OK;
+}
+
+nsresult
+TVGonkService::NotifyChannelScanned(const nsAString& aTunerId,
+                                    const nsAString& aSourceType,
+                                    nsITVChannelData* aChannelData)
+{
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(!aTunerId.IsEmpty());
+  MOZ_ASSERT(!aSourceType.IsEmpty());
+  MOZ_ASSERT(aChannelData);
+
+  nsTArray<nsCOMPtr<nsITVSourceListener>> listeners;
+  GetSourceListeners(aTunerId, aSourceType, listeners);
+  for (uint32_t i = 0; i < listeners.Length(); i++) {
+    nsresult rv =
+      listeners[i]->NotifyChannelScanned(aTunerId, aSourceType, aChannelData);
+    NS_WARN_IF(NS_FAILED(rv));
+  }
+
+  return NS_OK;
+}
+
+nsresult
+TVGonkService::NotifyChannelScanComplete(const nsAString& aTunerId,
+                                         const nsAString& aSourceType)
+{
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(!aTunerId.IsEmpty());
+  MOZ_ASSERT(!aSourceType.IsEmpty());
+
+  nsTArray<nsCOMPtr<nsITVSourceListener>> listeners;
+  GetSourceListeners(aTunerId, aSourceType, listeners);
+  for (uint32_t i = 0; i < listeners.Length(); i++) {
+    nsresult rv =
+      listeners[i]->NotifyChannelScanComplete(aTunerId, aSourceType);
+    NS_WARN_IF(NS_FAILED(rv));
+  }
+
+  return NS_OK;
+}
+
+nsresult
+TVGonkService::NotifyChannelScanStopped(const nsAString& aTunerId,
+                                        const nsAString& aSourceType)
+{
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(!aTunerId.IsEmpty());
+  MOZ_ASSERT(!aSourceType.IsEmpty());
+
+  nsTArray<nsCOMPtr<nsITVSourceListener>> listeners;
+  GetSourceListeners(aTunerId, aSourceType, listeners);
+  for (uint32_t i = 0; i < listeners.Length(); i++) {
+    nsresult rv = listeners[i]->NotifyChannelScanStopped(aTunerId, aSourceType);
+    NS_WARN_IF(NS_FAILED(rv));
+  }
+
+  return NS_OK;
+}
+
+nsresult
+TVGonkService::NotifyEITBroadcasted(const nsAString& aTunerId,
+                                    const nsAString& aSourceType,
+                                    nsITVChannelData* aChannelData,
+                                    nsITVProgramData** aProgramDataList,
+                                    uint32_t aCount)
+{
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(!aTunerId.IsEmpty());
+  MOZ_ASSERT(!aSourceType.IsEmpty());
+  MOZ_ASSERT(aChannelData);
+  MOZ_ASSERT(aProgramDataList);
+
+  nsTArray<nsCOMPtr<nsITVSourceListener>> listeners;
+  GetSourceListeners(aTunerId, aSourceType, listeners);
+  for (uint32_t i = 0; i < listeners.Length(); i++) {
+    nsresult rv = listeners[i]->NotifyEITBroadcasted(
+      aTunerId, aSourceType, aChannelData, aProgramDataList, aCount);
+    NS_WARN_IF(NS_FAILED(rv));
+  }
 
   return NS_OK;
 }

@@ -8,6 +8,7 @@
 
 #include <cutils/properties.h>
 
+#include "DTVInterface.h"
 #include "mozilla/Hal.h"
 #include "mozilla/ipc/DaemonSocket.h"
 #include "mozilla/ipc/DaemonSocketConnector.h"
@@ -66,7 +67,8 @@ TVDaemonNotificationHandler::~TVDaemonNotificationHandler() {}
 // TVDaemonProtocol
 //
 class TVDaemonProtocol final : public DaemonSocketIOConsumer,
-                               public RegistryModule
+                               public RegistryModule,
+                               public DTVModule
 {
 public:
   TVDaemonProtocol();
@@ -76,7 +78,7 @@ public:
   already_AddRefed<DaemonSocketResultHandler> FetchResultHandler(
     const DaemonSocketPDUHeader& aHeader);
 
-  // Methods for |TVRegistryModule|
+  // Methods for |TVRegistryModule| and |TVDTVModule|
   //
 
   nsresult Send(DaemonSocketPDU* aPDU,
@@ -92,6 +94,8 @@ private:
   void HandleRegistrySvc(const DaemonSocketPDUHeader& aHeader,
                          DaemonSocketPDU& aPDU,
                          DaemonSocketResultHandler* aRes);
+  void HandleDTVSvc(const DaemonSocketPDUHeader& aHeader, DaemonSocketPDU& aPDU,
+                    DaemonSocketResultHandler* aRes);
 
   RefPtr<DaemonSocket> mConnection;
   nsTArray<RefPtr<DaemonSocketResultHandler>> mResultHandlerQ;
@@ -128,7 +132,15 @@ TVDaemonProtocol::HandleRegistrySvc(const DaemonSocketPDUHeader& aHeader,
   RegistryModule::HandleSvc(aHeader, aPDU, aRes);
 }
 
-// |TVRegistryModule|
+void
+TVDaemonProtocol::HandleDTVSvc(const DaemonSocketPDUHeader& aHeader,
+                               DaemonSocketPDU& aPDU,
+                               DaemonSocketResultHandler* aRes)
+{
+  DTVModule::HandleSvc(aHeader, aPDU, aRes);
+}
+
+// |TVRegistryModule|, |TVDTVModule|
 
 nsresult
 TVDaemonProtocol::Send(DaemonSocketPDU* aPDU, DaemonSocketResultHandler* aRes)
@@ -159,7 +171,9 @@ TVDaemonProtocol::Handle(DaemonSocketPDU& aPDU)
   static void (TVDaemonProtocol::*const HandleSvc[])(
     const DaemonSocketPDUHeader&, DaemonSocketPDU&,
     DaemonSocketResultHandler*) = {[RegistryModule::SERVICE_ID] =
-                                     &TVDaemonProtocol::HandleRegistrySvc };
+                                     &TVDaemonProtocol::HandleRegistrySvc,
+                                   [DTVModule::SERVICE_ID] =
+                                     &TVDaemonProtocol::HandleDTVSvc };
 
   DaemonSocketPDUHeader header;
 
@@ -196,6 +210,8 @@ TVDaemonProtocol::StoreResultHandler(const DaemonSocketPDU& aPDU)
 TVDaemonInterface*
 TVDaemonInterface::GetInstance()
 {
+  NS_ASSERTION(NS_IsMainThread(), "Main thread only");
+
   static UniquePtr<TVDaemonInterface> sInterface;
 
   if (!sInterface) {
@@ -321,12 +337,27 @@ TVDaemonInterface::Disconnect(TVDaemonResultHandler* aRes)
 RegistryInterface*
 TVDaemonInterface::GetTVRegistryInterface()
 {
+  NS_ASSERTION(NS_IsMainThread(), "Main thread only");
+
   if (!mRegistryInterface) {
     RefPtr<RegistryModule> module = mProtocol.get();
     mRegistryInterface = MakeUnique<RegistryInterface>(module.forget());
   }
 
   return mRegistryInterface.get();
+}
+
+DTVInterface*
+TVDaemonInterface::GetTVDTVInterface()
+{
+  NS_ASSERTION(NS_IsMainThread(), "Main thread only");
+
+  if (!mDTVInterface) {
+    RefPtr<DTVModule> module = mProtocol.get();
+    mDTVInterface = MakeUnique<DTVInterface>(module.forget());
+  }
+
+  return mDTVInterface.get();
 }
 
 TVDaemonInterface::TVDaemonInterface() : mNotificationHandler(nullptr) {}

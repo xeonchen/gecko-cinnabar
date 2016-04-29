@@ -9,7 +9,6 @@
 #include "mozilla/unused.h"
 #include "nsArrayUtils.h"
 #include "nsServiceManagerUtils.h"
-#include "TVTypes.h"
 #include "TVIPCHelper.h"
 
 namespace mozilla {
