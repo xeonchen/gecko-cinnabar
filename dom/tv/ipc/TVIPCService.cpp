@@ -42,7 +42,7 @@ TVIPCService::RegisterSourceListener(const nsAString& aTunerId,
   MOZ_ASSERT(!aSourceType.IsEmpty());
   MOZ_ASSERT(aListener);
 
-  mSourceListenerTuples.AppendElement(new TVSourceListenerTuple(
+  mSourceListenerTuples.AppendElement(MakeUnique<TVSourceListenerTuple>(
     nsString(aTunerId), nsString(aSourceType), aListener));
 
   if (sTVChild) {

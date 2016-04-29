@@ -1380,6 +1380,9 @@ static const mozilla::Module::CategoryEntry kLayoutCategories[] = {
 #ifdef MOZ_WIDGET_GONK
   { "profile-after-change", "Gonk System Worker Manager", SYSTEMWORKERMANAGER_CONTRACTID },
 #endif
+#ifdef MOZ_WIDGET_GONK
+  { "profile-after-change", "TVService", TV_SERVICE_CONTRACTID },
+#endif
 #ifdef MOZ_B2G_BT
   { "profile-after-change", "Bluetooth Service", BLUETOOTHSERVICE_CONTRACTID },
 #endif

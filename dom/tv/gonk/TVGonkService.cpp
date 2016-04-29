@@ -10,15 +10,162 @@
 #include "nsCOMPtr.h"
 #include "nsIMutableArray.h"
 #include "nsServiceManagerUtils.h"
+#include "TVDaemonInterface.h"
 
 namespace mozilla {
 namespace dom {
 
+class DisconnectResultHandler final : public TVDaemonResultHandler
+{
+public:
+  DisconnectResultHandler(TVDaemonInterface* aInterface)
+    : mInterface(aInterface)
+  {
+    MOZ_ASSERT(aInterface);
+  }
+
+  void OnError(TVStatus aError)
+  {
+    MOZ_ASSERT(mInterface);
+
+    TVDaemonResultHandler::OnError(aError);
+    if (!mInterface) {
+      return;
+    }
+    mInterface->SetNotificationHandler(nullptr);
+  }
+
+  void Disconnect() override
+  {
+    MOZ_ASSERT(mInterface);
+
+    if (!mInterface) {
+      return;
+    }
+    mInterface->SetNotificationHandler(nullptr);
+  }
+
+private:
+  TVDaemonInterface* mInterface;
+};
+
+/**
+ * |TVRegisterModuleResultHandler| implements the result-handler
+ * callback for registering the services. If an error occures
+ * during the process, the result handler
+ * disconnects and closes the backend.
+ */
+class TVRegisterModuleResultHandler final : public RegistryResultHandler
+{
+public:
+  TVRegisterModuleResultHandler(TVDaemonInterface* aInterface)
+    : mInterface(aInterface)
+  {
+    MOZ_ASSERT(aInterface);
+  }
+
+  void OnError(TVStatus aError) override
+  {
+    RegistryResultHandler::OnError(aError);
+    Disconnect(); // Registering failed, so close the connection completely
+  }
+
+  void RegisterModule() override
+  {
+    // TODO
+  }
+
+  void Disconnect()
+  {
+    MOZ_ASSERT(mInterface);
+    mInterface->Disconnect(new DisconnectResultHandler(mInterface));
+  }
+
+private:
+  TVDaemonInterface* mInterface;
+};
+
+/**
+ * |TVConnectResultHandler| implements the result-handler
+ * callback for starting the TV backend.
+ */
+class TVConnectResultHandler final : public TVDaemonResultHandler
+{
+public:
+  TVConnectResultHandler(TVDaemonInterface* aInterface) : mInterface(aInterface)
+  {
+    MOZ_ASSERT(aInterface);
+  }
+
+  void OnError(TVStatus aError) override
+  {
+    MOZ_ASSERT(mInterface);
+
+    TVDaemonResultHandler::OnError(aError);
+    mInterface->SetNotificationHandler(nullptr);
+  }
+
+  void Connect() override
+  {
+    MOZ_ASSERT(NS_IsMainThread());
+    // TODO Register service here.
+  }
+
+private:
+  TVDaemonInterface* mInterface;
+};
+
+/**
+ * This is the notifiaction handler for the TV interface. If the backend
+ * crashes, we can restart it from here.
+ */
+class TVNotificationHandler final : public TVDaemonNotificationHandler
+{
+public:
+  TVNotificationHandler(TVDaemonInterface* aInterface) : mInterface(aInterface)
+  {
+    MOZ_ASSERT(mInterface);
+    mInterface->SetNotificationHandler(this);
+  }
+
+  void BackendErrorNotification(bool aCrashed) override
+  {
+    MOZ_ASSERT(mInterface);
+
+    // Force the TV daemon interface to init.
+    // Start up
+    // Init, step 1: connect to TV backend
+    mInterface->Connect(this, new TVConnectResultHandler(mInterface));
+  }
+
+private:
+  TVDaemonInterface* mInterface;
+};
+
 NS_IMPL_ISUPPORTS(TVGonkService, nsITVService)
 
-TVGonkService::TVGonkService() {}
+TVGonkService::TVGonkService()
+{
+  mInterface = TVDaemonInterface::GetInstance();
 
-TVGonkService::~TVGonkService() {}
+  if (!mInterface) {
+    return;
+  }
+
+  // Force the TV daemon interface to init.
+  // Start up
+  // Init, step 1: connect to TV backend
+  mInterface->Connect(new TVNotificationHandler(mInterface),
+                      new TVConnectResultHandler(mInterface));
+}
+
+TVGonkService::~TVGonkService()
+{
+  if (!mInterface) {
+    return;
+  }
+  mInterface->Disconnect(new DisconnectResultHandler(mInterface));
+}
 
 NS_IMETHODIMP
 TVGonkService::RegisterSourceListener(const nsAString& aTunerId,
@@ -30,7 +177,7 @@ TVGonkService::RegisterSourceListener(const nsAString& aTunerId,
   MOZ_ASSERT(!aSourceType.IsEmpty());
   MOZ_ASSERT(aListener);
 
-  mSourceListenerTuples.AppendElement(new TVSourceListenerTuple(
+  mSourceListenerTuples.AppendElement(MakeUnique<TVSourceListenerTuple>(
     nsString(aTunerId), nsString(aSourceType), aListener));
   return NS_OK;
 }
@@ -60,7 +207,7 @@ TVGonkService::UnregisterSourceListener(const nsAString& aTunerId,
 void
 TVGonkService::GetSourceListeners(
   const nsAString& aTunerId, const nsAString& aSourceType,
-  nsTArray<nsCOMPtr<nsITVSourceListener> >& aListeners) const
+  nsTArray<nsCOMPtr<nsITVSourceListener>>& aListeners) const
 {
   aListeners.Clear();
 

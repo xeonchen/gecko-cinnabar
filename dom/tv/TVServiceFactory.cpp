@@ -18,6 +18,22 @@
 namespace mozilla {
 namespace dom {
 
+#ifdef MOZ_WIDGET_GONK
+static bool
+HasDaemon()
+{
+  static bool tested;
+  static bool hasDaemon;
+
+  if (MOZ_UNLIKELY(!tested)) {
+    hasDaemon = !access("/system/bin/tvd", X_OK);
+    tested = true;
+  }
+
+  return hasDaemon;
+}
+#endif
+
 /* static */ already_AddRefed<nsITVService>
 TVServiceFactory::AutoCreateTVService()
 {
@@ -29,7 +45,9 @@ TVServiceFactory::AutoCreateTVService()
   }
 
 #ifdef MOZ_WIDGET_GONK
-  service = new TVGonkService();
+  if (HasDaemon()) {
+    service = new TVGonkService();
+  }
 #endif
 
   if (!service) {

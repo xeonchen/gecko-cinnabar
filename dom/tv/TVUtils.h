@@ -18,10 +18,12 @@ namespace dom {
 inline nsString
 ToTVSourceTypeStr(const TVSourceType aSourceType)
 {
-  MOZ_ASSERT(uint32_t(aSourceType) < ArrayLength(TVSourceTypeValues::strings));
+  MOZ_ASSERT(static_cast<uint32_t>(aSourceType) <
+             ArrayLength(TVSourceTypeValues::strings));
 
   nsString str;
-  str.AssignASCII(TVSourceTypeValues::strings[uint32_t(aSourceType)].value);
+  str.AssignASCII(
+    TVSourceTypeValues::strings[static_cast<uint32_t>(aSourceType)].value);
   return str;
 }
 

@@ -15,6 +15,8 @@
 namespace mozilla {
 namespace dom {
 
+class TVDaemonInterface;
+
 class TVGonkService final : public nsITVService
 {
 public:
@@ -24,6 +26,8 @@ public:
   TVGonkService();
 
 private:
+  TVDaemonInterface* mInterface;
+
   ~TVGonkService();
 
   void GetSourceListeners(
