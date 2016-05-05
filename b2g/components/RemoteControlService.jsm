@@ -16,6 +16,7 @@
  *
  * Here is related component location:
  * gecko/b2g/components/RemoteControlService.jsm
+ * gecko/b2g/chrome/content/remote_command.js
  *
  * For more details, please visit: https://wiki.mozilla.org/Firefox_OS/Remote_Control
  */
@@ -32,6 +33,11 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 XPCOMUtils.defineLazyServiceGetter(this, "certService", "@mozilla.org/security/local-cert-service;1",
                                    "nsILocalCertService");
 
+XPCOMUtils.defineLazyModuleGetter(this, "SystemAppProxy", "resource://gre/modules/SystemAppProxy.jsm");
+
+const ScriptableInputStream = CC("@mozilla.org/scriptableinputstream;1",
+                                 "nsIScriptableInputStream", "init");
+
 // static functions
 function debug(aStr) {
   dump("RemoteControlService: " + aStr + "\n");
@@ -42,6 +48,8 @@ const DEBUG = false;
 const MAX_CLIENT_CONNECTIONS = 5; // Allow max 5 clients to use remote control TV
 const REMOTECONTROL_PREF_MDNS_SERVICE_TYPE = "_remotecontrol._tcp";
 const REMOTECONTROL_PREF_MDNS_SERVICE_NAME = "dom.presentation.device.name";
+const REMOTECONTROL_PREF_COMMANDJS_PATH = "chrome://b2g/content/remote_command.js";
+const REMOTE_CONTROL_EVENT = "mozChromeRemoteControlEvent";
 
 const SERVER_STATUS = {
   STOPPED: 0,
@@ -49,6 +57,7 @@ const SERVER_STATUS = {
 };
 
 let nextConnectionId = 0; // Used for tracking existing connections
+let commandJSSandbox = null; // Sandbox runs remote_command.js
 
 this.RemoteControlService = {
   // Remote Control status
@@ -59,6 +68,11 @@ this.RemoteControlService = {
   _serverSocket: null, // The server socket associated with this
   _connections: new Map(), // Hash of all open connections, indexed by connection Id
   _mDNSRegistrationHandle: null, // For cancel mDNS registration
+
+  // remote_command.js
+  exportFunctions: {}, // Functions export to remote_command.js
+  _sharedState: {}, // Shared state storage between connections
+  _isCursorMode: false, // Store SystemApp isCursorMode
 
   // PUBLIC API
   // Start TLS socket server.
@@ -88,6 +102,7 @@ this.RemoteControlService = {
 
     DEBUG && debug("Stop listening on port " + this._serverSocket.port);
 
+    SystemAppProxy.removeEventListener("mozContentEvent", this);
     Services.obs.removeObserver(this, "xpcom-shutdown");
 
     if (this._mDNSRegistrationHandle) {
@@ -95,6 +110,7 @@ this.RemoteControlService = {
       this._mDNSRegistrationHandle = null;
     }
 
+    commandJSSandbox = null;
     this._port = -1;
     this._serverSocket.close();
     this._serverSocket = null;
@@ -113,6 +129,26 @@ this.RemoteControlService = {
         break;
       }
     }
+  },
+
+  // SystemAppProxy event listener
+  handleEvent: function(evt) {
+    if (evt.type !== "mozContentEvent") {
+      return;
+    }
+
+    let detail = evt.detail;
+    if (!detail) {
+      return;
+    }
+
+    switch (detail.type) {
+      case "control-mode-changed":
+        // Use mozContentEvent to receive control mode of current app from System App
+        // remote_command.js use "getIsCursorMode" to determine what kind event should dispatch to app
+        this._isCursorMode = detail.detail.cursor;
+        break;
+   }
   },
 
   // nsIServerSocketListener
@@ -175,6 +211,17 @@ this.RemoteControlService = {
     // Monitor xpcom-shutdown to stop service and clean up
     Services.obs.addObserver(this, "xpcom-shutdown", false);
 
+    // Listen control mode change from gaia, request when service starts
+    SystemAppProxy.addEventListener("mozContentEvent", this);
+    SystemAppProxy._sendCustomEvent(REMOTE_CONTROL_EVENT, {action: "request-control-mode"});
+
+    // Internal functions export to remote_command.js
+    this.exportFunctions = {
+      "getSharedState": this._getSharedState,
+      "setSharedState": this._setSharedState,
+      "getIsCursorMode": this._getIsCursorMode,
+    }
+
     // Start TLSSocketServer with self-signed certification
     // If there is no module use PSM before, handleCert result is SEC_ERROR_NO_MODULE (0x805A1FC0).
     // Get PSM here ensure certService.getOrCreateCert works properly.
@@ -216,8 +263,11 @@ this.RemoteControlService = {
             DEBUG && debug("Listen on port " + socket.port + ", " + MAX_CLIENT_CONNECTIONS + " pending connections");
 
             socket.serverCert = cert;
-            socket.setSessionCache(true);
-            socket.setSessionTickets(true);
+            // Set session cache and tickets to false here.
+            // Cache disconnects fennect addon when addon sends message
+            // Tickets crashes b2g when fennec addon connects
+            socket.setSessionCache(false);
+            socket.setSessionTickets(false);
             socket.setRequestClientCertificate(Ci.nsITLSServerSocket.REQUEST_NEVER);
 
             socket.asyncListen(self);
@@ -253,6 +303,26 @@ this.RemoteControlService = {
   _connectionClosed: function(aConnectionId) {
     DEBUG && debug("Close connection " + aConnectionId);
     this._connections.delete(aConnectionId);
+  },
+
+  // Get the value corresponding to a given key for remote_command.js state preservation
+  _getSharedState: function(aKey) {
+    if (aKey in RemoteControlService._sharedState) {
+      return RemoteControlService._sharedState[aKey];
+    }
+    return "";
+  },
+
+  // Set the value corresponding to a given key for remote_command.js state preservation
+  _setSharedState: function(aKey, aValue) {
+    if (typeof aValue !== "string") {
+      throw new Error("non-string value passed");
+    }
+    RemoteControlService._sharedState[aKey] = aValue;
+  },
+
+  _getIsCursorMode: function() {
+    return RemoteControlService._isCursorMode;
   },
 };
 
@@ -385,6 +455,39 @@ Connection.prototype = {
   },
 };
 
+// Load remote_command.js to commandJSSandbox when receives command event
+// Release sandbox in RemoteControlService.stop()
+function getCommandJSSandbox(aImportFunctions) {
+  if (commandJSSandbox == null) {
+    try {
+      let channel = Services.io.newChannel2(REMOTECONTROL_PREF_COMMANDJS_PATH, null, null,
+                                            null, Services.scriptSecurityManager.getSystemPrincipal(),
+                                            null, Ci.nsILoadInfo.SEC_NORMAL, Ci.nsIContentPolicy.TYPE_OTHER);
+      var fis = channel.open();
+      let sis = new ScriptableInputStream(fis);
+      commandJSSandbox = Cu.Sandbox(Cc["@mozilla.org/systemprincipal;1"].createInstance(Ci.nsIPrincipal));
+
+      // Import function registered from external
+      for(let functionName in aImportFunctions) {
+        commandJSSandbox.importFunction(aImportFunctions[functionName], functionName);
+      }
+
+      try {
+        // Evaluate remote_command.js in sandbox
+        Cu.evalInSandbox(sis.read(fis.available()), commandJSSandbox, "latest");
+      } catch (e) {
+        DEBUG && debug("Syntax error in remote_command.js at " + channel.URI.path + ": " + e);
+      }
+    } catch(e) {
+      DEBUG && debug("Error initializing sandbox: " + e);
+    } finally {
+      fis.close();
+    }
+  }
+
+  return commandJSSandbox;
+}
+
 // Parse and dispatch incoming events from client
 function EventHandler(aConnection) {
   this._connection = aConnection;
@@ -394,7 +497,24 @@ function EventHandler(aConnection) {
 EventHandler.prototype = {
   // PUBLIC FUNCTIONS
   handleEvent: function(aEvent) {
-    // TODO: Implement control command dispatch (Bug 1197751)
-    //       and JPAKE pairing (Bug 1207996) here
+    // TODO: Implement JPAKE pairing (Bug 1207996)
+    switch (aEvent.type) {
+      // Implement control command dispatch
+      case "command":
+        this._handleCommandEvent(aEvent);
+        break;
+      default:
+        break;
+    }
+  },
+
+  // Pass and run command event in sandbox
+  _handleCommandEvent: function(aEvent) {
+    try {
+      let sandbox = getCommandJSSandbox(this._connection.server.exportFunctions);
+      sandbox.handleEvent(aEvent);
+    } catch (e) {
+      DEBUG && debug("Error running remote_command.js :" + e);
+    }
   },
 };
