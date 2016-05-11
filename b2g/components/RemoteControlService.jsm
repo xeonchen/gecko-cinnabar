@@ -10,6 +10,17 @@
  *
  *     user -->  nsITLSSocketServer --> script (gecko)
  *
+ * Event handler will have these status with JPAKE authentication:
+ *   INITIAL->ROUND_1->ROUND_2->VERIFY_KEY->COMMAND
+ * In each status, event handler only accepts correct events from client.
+ * If client sends wrong event, event handler will send back error message, then disconnect.
+ *
+ * INITIAL: wait for handshake event
+ * ROUND_1: wait for client JPAKE round 1 result
+ * ROUND_2: wait for client JPAKE round 2 result
+ * VERIFY_KEY: wait for client's hash of AES key
+ * COMMAND: wait for control command
+ *
  * Events from user are in JSON format. After they are parsed into control command,
  * these events are passed to script (js), run in sandbox,
  * and dispatch corresponding events to Gecko.
@@ -32,6 +43,8 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 
 XPCOMUtils.defineLazyServiceGetter(this, "certService", "@mozilla.org/security/local-cert-service;1",
                                    "nsILocalCertService");
+XPCOMUtils.defineLazyServiceGetter(this, "UUIDGenerator", "@mozilla.org/uuid-generator;1",
+                                   "nsIUUIDGenerator");
 
 XPCOMUtils.defineLazyModuleGetter(this, "SystemAppProxy", "resource://gre/modules/SystemAppProxy.jsm");
 
@@ -49,11 +62,27 @@ const MAX_CLIENT_CONNECTIONS = 5; // Allow max 5 clients to use remote control T
 const REMOTECONTROL_PREF_MDNS_SERVICE_TYPE = "_remotecontrol._tcp";
 const REMOTECONTROL_PREF_MDNS_SERVICE_NAME = "dom.presentation.device.name";
 const REMOTECONTROL_PREF_COMMANDJS_PATH = "chrome://b2g/content/remote_command.js";
+const REMOTECONTROL_PREF_DEVICES = "remotecontrol.paired_devices";
 const REMOTE_CONTROL_EVENT = "mozChromeRemoteControlEvent";
+
+const PINCODE_LENGTH = 4;
+const FINGERPRINT_LENGTH = 12;
+const TV_SIGNER_ID = "server";
+const CLIENT_SIGNER_ID = "client";
+// Extra input to SHA256-HMAC in generate entry, includes the full crypto spec.
+const HMAC_INPUT ="AES_256_CBC-HMAC256";
 
 const SERVER_STATUS = {
   STOPPED: 0,
   STARTED: 1
+};
+
+const EVENT_HANDLER_STATUS = {
+  INITIAL: 0,
+  ROUND_1: 1,
+  ROUND_2: 2,
+  VERIFY_KEY: 3,
+  COMMAND: 4,
 };
 
 let nextConnectionId = 0; // Used for tracking existing connections
@@ -68,11 +97,16 @@ this.RemoteControlService = {
   _serverSocket: null, // The server socket associated with this
   _connections: new Map(), // Hash of all open connections, indexed by connection Id
   _mDNSRegistrationHandle: null, // For cancel mDNS registration
+  _certFingerprint: null, // For JPAKE secret
 
   // remote_command.js
   exportFunctions: {}, // Functions export to remote_command.js
   _sharedState: {}, // Shared state storage between connections
   _isCursorMode: false, // Store SystemApp isCursorMode
+
+  // JPAKE pairing
+  _pin: null,
+  _pairedDevices: {},
 
   // PUBLIC API
   // Start TLS socket server.
@@ -114,9 +148,65 @@ this.RemoteControlService = {
     this._port = -1;
     this._serverSocket.close();
     this._serverSocket = null;
+    this._certFingerprint = null;
     this._serverStatus = SERVER_STATUS.STOPPED;
 
     return true;
+  },
+
+  // Generate PIN code for pairing, format is 4 digits
+  // 0000 and random generated number to a new string
+  // Then get last 4 characters as new PIN code
+  generatePIN: function() {
+    let padding = new Array(PINCODE_LENGTH + 1).join('0');
+    this._pin = (padding + Math.floor(Math.random() * Math.pow(10, PINCODE_LENGTH))).slice(-1 * PINCODE_LENGTH);
+    return this._pin;
+  },
+
+  // Get current PIN
+  getPIN: function() {
+    return this._pin;
+  },
+
+  // Clean current PIN code
+  clearPIN: function() {
+    this._pin = null;
+  },
+
+  // Return first 12 characters of server certifications
+  getCertFingerprint: function() {
+    return this._certFingerprint;
+  },
+
+  generateUUID: function(aAES256Key, aHMAC256Key) {
+    let uuidString = UUIDGenerator.generateUUID().toString();
+
+    this._pairedDevices[uuidString] = {
+      aesKey: aAES256Key,
+      hmacKey: aHMAC256Key,
+    };
+
+    Services.prefs.setCharPref(REMOTECONTROL_PREF_DEVICES, JSON.stringify(this._pairedDevices));
+
+    return uuidString;
+  },
+
+  getKeysFromUUID: function(aUUID) {
+    if(aUUID in this._pairedDevices) {
+      return this._pairedDevices[aUUID];
+    }
+
+    return null;
+  },
+
+  updateUUID: function(aUUID, aAES256Key, aHMAC256Key) {
+    if(aUUID in this._pairedDevices) {
+      this._pairedDevices[aUUID] = {
+        aesKey: aAES256Key,
+        hmacKey: aHMAC256Key,
+      };
+      Services.prefs.setCharPref(REMOTECONTROL_PREF_DEVICES, JSON.stringify(this._pairedDevices));
+    }
   },
 
   // Observers and Listeners
@@ -148,6 +238,9 @@ this.RemoteControlService = {
         // remote_command.js use "getIsCursorMode" to determine what kind event should dispatch to app
         this._isCursorMode = detail.detail.cursor;
         break;
+      case "remote-control-pin-dismissed":
+        this.clearPIN();
+        break;
    }
   },
 
@@ -161,7 +254,7 @@ this.RemoteControlService = {
 
     try {
       var input = aTrans.openInputStream(0, SEGMENT_SIZE, SEGMENT_COUNT)
-                       .QueryInterface(Ci.nsIAsyncInputStream);
+                        .QueryInterface(Ci.nsIAsyncInputStream);
       var output = aTrans.openOutputStream(0, 0, 0);
     } catch (e) {
       DEBUG && debug("Error opening transport streams: " + e);
@@ -215,6 +308,17 @@ this.RemoteControlService = {
     SystemAppProxy.addEventListener("mozContentEvent", this);
     SystemAppProxy._sendCustomEvent(REMOTE_CONTROL_EVENT, {action: "request-control-mode"});
 
+    // Read already stored devices
+    try {
+      this._pairedDevices = JSON.parse(Services.prefs.getCharPref(REMOTECONTROL_PREF_DEVICES));
+    } catch(e) {
+      DEBUG && debug ("Parse stored devices error: " + e);
+
+      // Empty paired devices
+      this._pairedDevices = {};
+      Services.prefs.setCharPref(REMOTECONTROL_PREF_DEVICES, JSON.stringify(this._pairedDevices));
+    }
+
     // Internal functions export to remote_command.js
     this.exportFunctions = {
       "getSharedState": this._getSharedState,
@@ -232,6 +336,9 @@ this.RemoteControlService = {
           aReject("getOrCreateCert " + result);
           return;
         } else {
+          // Store first 12 characters of server certifications for authentication weak secret
+          self._certFingerprint = cert.sha256Fingerprint.slice(0, FINGERPRINT_LENGTH);
+
           try {
             // Try to get random port
             let ios = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
@@ -373,6 +480,10 @@ Connection.prototype = {
     this.server._connectionClosed(this.connectionId);
   },
 
+  sendMsg: function(aMessage) {
+    this._output.writeString(JSON.stringify(aMessage));
+  },
+
   // nsIInputStreamCallback
   onInputStreamReady: function(aInput) {
     DEBUG && debug("onInputStreamReady(aInput=" + aInput + ") on thread " +
@@ -455,6 +566,28 @@ Connection.prototype = {
   },
 };
 
+// For AES/HMAC key base64 string from JPAKE
+// Use ArrayBuffer in Web Crypto (like import key)
+function base64FromArrayBuffer(aArrayBuffer) {
+  let binary = '';
+  let bytes = new Uint8Array(aArrayBuffer);
+  let len = bytes.byteLength;
+  for (var i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(abase64) {
+  let binary_string = atob(abase64);
+  let len = binary_string.length;
+  let bytes = new Uint8Array(len);
+  for (var i = 0; i < len; i++) {
+    bytes[i] = binary_string.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
 // Load remote_command.js to commandJSSandbox when receives command event
 // Release sandbox in RemoteControlService.stop()
 function getCommandJSSandbox(aImportFunctions) {
@@ -491,30 +624,342 @@ function getCommandJSSandbox(aImportFunctions) {
 // Parse and dispatch incoming events from client
 function EventHandler(aConnection) {
   this._connection = aConnection;
+  this._server = aConnection.server;
 
   aConnection.eventHandler = this;
+
+  this._status = EVENT_HANDLER_STATUS.INITIAL;
+
+  this._clientID = null;
+  this._aes256B64 = {};
+  this._hmac256B64 = {};
+  this._hmac256Key = null;
+
+  this._JPAKE = null;
+  // For round 1
+  this._gx1 = {};
+  this._gv1 = {};
+  this._r1 = {};
+  this._gx2 = {};
+  this._gv2 = {};
+  this._r2 = {};
+  // For round 2
+  this._A = {};
+  this._gva = {};
+  this._ra = {};
+
+  this._client_round1 = null;
+  this._client_round2 = null;
 }
 EventHandler.prototype = {
   // PUBLIC FUNCTIONS
   handleEvent: function(aEvent) {
-    // TODO: Implement JPAKE pairing (Bug 1207996)
     switch (aEvent.type) {
-      // Implement control command dispatch
+      case "auth":
+        // Implement JPAKE authentication
+        this._handleAuthEvent(aEvent);
+        break;
       case "command":
+        // Implement control command dispatch
         this._handleCommandEvent(aEvent);
+        break;
+      default:
+        // Not accepted event type, report error to client
+        this._handleError(this, "common", "Not accepted event type");
+        break;
+    }
+  },
+
+  _handleAuthEvent: function(aEvent) {
+    switch (aEvent.action) {
+      case "request_handshake":
+        this._handleHandshake(aEvent);
+        break;
+      case "jpake_client_1":
+        this._handleJPAKERound1Event(aEvent);
+        break;
+      case "jpake_client_2":
+        this._handleJPAKERound2Event(aEvent);
+        break;
+      case "client_key_confirmation":
+        this._handleKeyConfirmEvent(aEvent);
         break;
       default:
         break;
     }
   },
 
-  // Pass and run command event in sandbox
+  _handleHandshake: function(aEvent) {
+    if (this._status != EVENT_HANDLER_STATUS.INITIAL) {
+      DEBUG && debug("Status not in INITIAL, drop the event");
+      this._handleError(this, aEvent.type, "Wrong status");
+      return;
+    }
+
+    let reply = {
+      type: "auth",
+      action: "response_handshake",
+      detail: 1
+    };
+
+    // If client sends an existing ID, then reply is 2 (second connection)
+    // Also restore AES and HMAC key from UUID
+    if (aEvent.detail && aEvent.detail.id && this._server.getKeysFromUUID(aEvent.detail.id) !== null) {
+      reply.detail = 2;
+
+      this._clientID = aEvent.detail.id;
+      let keys = this._server.getKeysFromUUID(aEvent.detail.id);
+      this._aes256B64 = { value: keys.aesKey };
+      this._hmac256B64 = { value: keys.hmacKey };
+    }
+
+    this._connection.sendMsg(reply);
+    this._status = EVENT_HANDLER_STATUS.ROUND_1;
+  },
+
+  _handleJPAKERound1Event: function(aEvent) {
+    if (this._status != EVENT_HANDLER_STATUS.ROUND_1) {
+      DEBUG && debug("Status not in ROUND_1, drop the event");
+      this._handleError(this, aEvent.type, "Wrong status");
+      return;
+    }
+
+    // First time connection, generate PIN, trigger notification on screen
+    if (this._clientID === null) {
+      let pin = this._server.getPIN();
+      if(pin === null) {
+        pin = this._server.generatePIN();
+        // Show notification on screen
+        SystemAppProxy._sendCustomEvent(REMOTE_CONTROL_EVENT, { pincode: pin, action: 'pin-created' });
+      }
+    }
+
+    // Store client round 1
+    this._client_round1 = aEvent.detail;
+
+    // Compute server round 1
+    this._JPAKE = Cc["@mozilla.org/services-crypto/sync-jpake;1"]
+                    .createInstance(Ci.nsISyncJPAKE);
+    try {
+      this._JPAKE.round1(TV_SIGNER_ID, this._gx1, this._gv1, this._r1,
+                         this._gx2, this._gv2, this._r2);
+    } catch (e) {
+      DEBUG && debug("JPAKE round1 get error: " + e);
+      this._handleError(this, aEvent.type, "JPAKE error: " + e.message);
+      return;
+    }
+
+    // Send round_1 result
+    let reply = {
+      type: "auth",
+      action: "jpake_server_1",
+      detail: {
+        gx1: this._gx1.value,
+        gx2: this._gx2.value,
+        zkp_x1: {gr: this._gv1.value, b: this._r1.value, id: TV_SIGNER_ID},
+        zkp_x2: {gr: this._gv2.value, b: this._r2.value, id: TV_SIGNER_ID}
+      }
+    };
+
+    this._connection.sendMsg(reply);
+    this._status = EVENT_HANDLER_STATUS.ROUND_2;
+  },
+
+  _handleJPAKERound2Event: function(aEvent) {
+    if (this._status != EVENT_HANDLER_STATUS.ROUND_2) {
+      DEBUG && debug("Status not in ROUND_2, drop the event");
+      this._handleError(this, aEvent.type, "Wrong status");
+      return;
+    }
+
+    // Store client round 2
+    this._client_round2 = aEvent.detail;
+
+    // Compute JPAKE round 2
+    let pin = null;
+
+    if (this._clientID !== null) {
+      // Not first time connection, use first 4 characters of previous AES key as PIN code
+      // Full AES key + TLS server cert is too long, round2 will throw error
+      pin = this._aes256B64.value.slice(0, PINCODE_LENGTH);
+    } else {
+      pin = this._server.getPIN();
+      if (pin === null) {
+        // Maybe some other client already used the PIN then clean it
+        DEBUG && debug("PN expire");
+        this._handleError(this, aEvent.type, "PIN expire");
+        return;
+      }
+    }
+
+    // Secret is PIN + first 12 characters of TLS server cert fingerprint
+    let secret = pin + this._server.getCertFingerprint();
+
+    try {
+      this._JPAKE.round2(CLIENT_SIGNER_ID, secret,
+                         this._client_round1.gx1, this._client_round1.zkp_x1.gr, this._client_round1.zkp_x1.b,
+                         this._client_round1.gx2, this._client_round1.zkp_x2.gr, this._client_round1.zkp_x2.b,
+                         this._A, this._gva, this._ra);
+    } catch (e) {
+      DEBUG && debug("JPAKE round2 get error: " + e);
+      this._handleError(this, aEvent.type, "JPAKE error: " + e.message);
+      return;
+    }
+
+    // Dismiss pin
+    if (this._clientID === null) {
+      this._server.clearPIN();
+      SystemAppProxy._sendCustomEvent(REMOTE_CONTROL_EVENT, { action: 'pin-destroyed' });
+    }
+
+    // Send round_2 result
+    let reply = {
+      type: "auth",
+      action: "jpake_server_2",
+      detail: {
+        A: this._A.value,
+        zkp_A: { gr: this._gva.value, b: this._ra.value, id: TV_SIGNER_ID }
+      }
+    };
+
+    this._connection.sendMsg(reply);
+
+    // Compute JPAKE final
+    try {
+      this._JPAKE.final(this._client_round2.A, this._client_round2.zkp_A.gr, this._client_round2.zkp_A.b,
+                        HMAC_INPUT, this._aes256B64, this._hmac256B64);
+    } catch (e) {
+      DEBUG && debug("JPAKE final get error: " + e);
+      this._handleError(this, aEvent.type, "JPAKE error: " + e.message);
+      return;
+    }
+
+    // Use HMAC key double hash AES key
+    let subtle = Services.wm.getMostRecentWindow("navigator:browser").crypto.subtle;
+    let self = this;
+
+    // Import HMAC key from base64 string
+    subtle.importKey(
+      "raw",
+      base64ToArrayBuffer(self._hmac256B64.value),
+      {
+        name: "HMAC",
+        hash: { name: "SHA-256" },
+      },
+      true,
+      ["sign", "verify"]
+    ).then(function(aHMACKey) {
+      self._hmac256Key = aHMACKey;
+
+      // First sign
+      subtle.sign(
+        {
+          name: "HMAC",
+        },
+        aHMACKey,
+        base64ToArrayBuffer(self._aes256B64.value)
+      ).then(function(aSignature1) {
+        // Second sign
+        subtle.sign(
+          {
+            name: "HMAC",
+          },
+          aHMACKey,
+          aSignature1
+        ).then(function(aSignature2) {
+          reply = {
+            type: "auth",
+            action: "server_key_confirm",
+            detail: {
+              signature: base64FromArrayBuffer(aSignature2)
+            }
+          };
+
+          self._connection.sendMsg(reply);
+          self._status = EVENT_HANDLER_STATUS.VERIFY_KEY;
+        }).catch(function(err) {
+          DEBUG && debug("Second HMAC sign error: " + err);
+          self._handleError(self, aEvent.type, "Second HMAC sign error: " + err);
+        });
+      }).catch(function(err) {
+        DEBUG && debug("First HMAC sign error: " + err);
+        self._handleError(self, aEvent.type, "First HMAC sign error: " + err);
+      });
+    }).catch(function(err) {
+      DEBUG && debug("Import HMAC key error: " + err);
+      self._handleError(self, aEvent.type, "Import HMAC key error: " + err);
+    });
+  },
+
+  _handleKeyConfirmEvent: function(aEvent) {
+    if (this._status != EVENT_HANDLER_STATUS.VERIFY_KEY) {
+      DEBUG && debug("Status not in VERIFY_KEY, drop the event");
+      this._handleError(this, aEvent.type, "Wrong status");
+      return;
+    }
+
+    // Exam hash of AES key from client
+    let subtle = Services.wm.getMostRecentWindow("navigator:browser").crypto.subtle;
+    let self = this;
+
+    subtle.verify(
+      {
+        name: "HMAC",
+      },
+      this._hmac256Key,
+      base64ToArrayBuffer(aEvent.detail.signature),
+      base64ToArrayBuffer(this._aes256B64.value)
+    ).then(function(isValid) {
+      DEBUG && debug("HMAC verify result: " + isValid);
+
+      let reply = {
+        type: "auth",
+        action: "finish_handshake",
+      };
+
+      // Check if we already has client ID, if not, generate UUID and set to reply
+      if (self._clientID === null) {
+        let uuid = self._server.generateUUID(self._aes256B64.value, self._hmac256B64.value);
+        self._clientID = uuid;
+        reply.detail = { id: uuid };
+      } else {
+        // Update client ID with new AES/HMAC key
+        self._server.updateUUID(self._clientID, self._aes256B64.value, self._hmac256B64.value);
+      }
+
+      // Send back key confirm result, change status to receiving command status
+      self._connection.sendMsg(reply);
+      self._status = EVENT_HANDLER_STATUS.COMMAND;
+    }).catch(function(err) {
+      DEBUG && debug("HMAC verify error: " + err);
+      self._handleError(self, aEvent.type, "HMAC verify error: " + err);
+    });
+  },
+
   _handleCommandEvent: function(aEvent) {
+    // If event handler is not ready to receive command, drop this event
+    if (this._status != EVENT_HANDLER_STATUS.COMMAND) {
+      DEBUG && debug("Status not in COMMAND, drop the event");
+      this._handleError(this, aEvent.type, "Wrong status");
+      return;
+    }
+
     try {
       let sandbox = getCommandJSSandbox(this._connection.server.exportFunctions);
       sandbox.handleEvent(aEvent);
     } catch (e) {
       DEBUG && debug("Error running remote_command.js :" + e);
     }
+  },
+
+  // Once error occurs, send error to client then close connection
+  _handleError: function(aHandler, aType, aError) {
+    let reply = {
+      type: aType,
+      error: aError
+    };
+
+    aHandler._connection.sendMsg(reply);
+    aHandler._connection.close();
   },
 };
