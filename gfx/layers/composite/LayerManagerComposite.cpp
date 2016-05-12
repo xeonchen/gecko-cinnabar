@@ -562,6 +562,34 @@ LayerManagerComposite::InvalidateDebugOverlay(nsIntRegion& aInvalidRegion, const
   }
 }
 
+void
+LayerManagerComposite::RenderMouseCursor(const gfx::Rect& aBounds)
+{
+  // Mouse Cursor ========================================================
+  if (mCompositor->GetWidget()->GetDrawMouse())
+  {
+    ScreenIntPoint screenPoint;
+    mCompositor->GetWidget()->GetScreenIntPoint(&screenPoint);
+
+    int width2 = 10;
+    float alpha2 = 1;
+    EffectChain effects2;
+    effects2.mPrimaryEffect = new EffectSolidColor(gfx::Color(1, 1, 1, 1));
+    mCompositor->DrawQuad(gfx::Rect(screenPoint.x - width2/2,
+                                  screenPoint.y - width2/2,
+                                  width2+2,
+                                  width2+2),
+                        aBounds, effects2, alpha2, gfx::Matrix4x4());
+    effects2.mPrimaryEffect = new EffectSolidColor(gfx::Color(1, 0, 0, 1));
+    mCompositor->DrawQuad(gfx::Rect(screenPoint.x - width2/2,
+                                  screenPoint.y - width2/2,
+                                  width2,
+                                  width2),
+                        aBounds, effects2, alpha2, gfx::Matrix4x4());
+  }
+  // =====================================================================
+}
+
 static uint16_t sFrameCount = 0;
 void
 LayerManagerComposite::RenderDebugOverlay(const Rect& aBounds)
@@ -850,7 +878,8 @@ LayerManagerComposite::Render(const nsIntRegion& aInvalidRegion, const nsIntRegi
   composer2D = mCompositor->GetWidget()->GetComposer2D();
 
   // We can't use composert2D if we have layer effects
-  if (!mTarget && !haveLayerEffects &&
+  if (!(mCompositor->GetWidget()->GetDrawMouse() && gfxPrefs::LayersDrawGonkCursor()) &&
+      !mTarget && !haveLayerEffects &&
       gfxPrefs::Composer2DCompositionEnabled() &&
       composer2D && composer2D->HasHwc() && composer2D->TryRenderWithHwc(mRoot,
           mCompositor->GetWidget(),
@@ -936,6 +965,11 @@ LayerManagerComposite::Render(const nsIntRegion& aInvalidRegion, const nsIntRegi
 
   // Debugging
   RenderDebugOverlay(actualBounds);
+
+  // Gonk Cursor
+  if (gfxPrefs::LayersDrawGonkCursor()) {
+    RenderMouseCursor(actualBounds);
+  }
 
   {
     PROFILER_LABEL("LayerManagerComposite", "EndFrame",

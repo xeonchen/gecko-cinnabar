@@ -379,6 +379,7 @@ class nsIWidget : public nsISupports {
       , mOnDestroyCalled(false)
       , mWindowType(eWindowType_child)
       , mZIndex(0)
+      , mDrawMouse(false)
 
     {
       ClearNativeTouchSequence(nullptr);
@@ -2077,6 +2078,18 @@ public:
                        const mozilla::NativeEventData& aKeyEventData,
                        nsIKeyEventInPluginCallback* aCallback);
 
+    virtual void GetScreenIntPoint(ScreenIntPoint* aScreenIntPoint)
+    { *aScreenIntPoint = mScreenPoint; }
+
+    virtual void SetScreenIntPoint(const ScreenIntPoint& aScreenIntPoint)
+    { mScreenPoint = aScreenIntPoint; }
+
+    virtual void SetDrawMouse(bool aDrawMouse)
+    { mDrawMouse = aDrawMouse; }
+
+    virtual bool GetDrawMouse()
+    { return mDrawMouse; }
+
 protected:
     /**
      * Like GetDefaultScale, but taking into account only the system settings
@@ -2098,6 +2111,11 @@ protected:
     bool mOnDestroyCalled;
     nsWindowType mWindowType;
     int32_t mZIndex;
+
+    // To store a position inforamtion related to any input devices operating
+    // over this widget.
+    ScreenIntPoint mScreenPoint;
+    bool mDrawMouse;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIWidget, NS_IWIDGET_IID)

@@ -539,7 +539,7 @@ public:
             const sp<InputWindowHandle>& inputWindowHandle, bool monitor);
     virtual status_t unregisterInputChannel(const sp<InputChannel>& inputChannel);
 
-
+    virtual void SetMouseDevice(bool aMouseDevice);
 
 protected:
     virtual ~GeckoInputDispatcher() { }
@@ -690,6 +690,12 @@ GeckoInputDispatcher::notifyKey(const NotifyKeyArgs* args)
     gAppShell->NotifyNativeEvent();
 }
 
+void
+GeckoInputDispatcher::SetMouseDevice(bool aMouseDevice)
+{
+  mTouchDispatcher->SetMouseDevice(aMouseDevice);
+}
+
 static void
 addMultiTouch(MultiTouchInput& aMultiTouch,
                                     const NotifyMotionArgs* args, int aIndex)
@@ -750,9 +756,11 @@ GeckoInputDispatcher::notifyMotion(const NotifyMotionArgs* args)
     case AMOTION_EVENT_ACTION_CANCEL:
         touchType = MultiTouchInput::MULTITOUCH_CANCEL;
         break;
+    case AMOTION_EVENT_ACTION_HOVER_MOVE:
+        touchType = MultiTouchInput::MULTITOUCH_HOVER_MOVE;
+        break;
     case AMOTION_EVENT_ACTION_HOVER_EXIT:
     case AMOTION_EVENT_ACTION_HOVER_ENTER:
-    case AMOTION_EVENT_ACTION_HOVER_MOVE:
         NS_WARNING("Ignoring hover touch events");
         return;
     default:

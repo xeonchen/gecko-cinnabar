@@ -46,6 +46,8 @@ public:
     static void DoDraw(void);
     static nsEventStatus DispatchKeyInput(mozilla::WidgetKeyboardEvent& aEvent);
     static void DispatchTouchInput(mozilla::MultiTouchInput& aInput);
+    static void SetMouseDevice(bool aMouse);
+    static void NotifyHoverMove(const ScreenIntPoint& point);
 
     using nsBaseWidget::Create; // for Create signature not overridden here
     NS_IMETHOD Create(nsIWidget* aParent,

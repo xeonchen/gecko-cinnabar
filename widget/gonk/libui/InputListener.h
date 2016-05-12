@@ -164,6 +164,8 @@ public:
     virtual void notifyMotion(const NotifyMotionArgs* args) = 0;
     virtual void notifySwitch(const NotifySwitchArgs* args) = 0;
     virtual void notifyDeviceReset(const NotifyDeviceResetArgs* args) = 0;
+    virtual void SetMouseDevice(bool aMouse) = 0;
+
 };
 
 
@@ -183,6 +185,7 @@ public:
     virtual void notifyMotion(const NotifyMotionArgs* args);
     virtual void notifySwitch(const NotifySwitchArgs* args);
     virtual void notifyDeviceReset(const NotifyDeviceResetArgs* args);
+    virtual void SetMouseDevice(bool aMouse);
 
     void flush();
 

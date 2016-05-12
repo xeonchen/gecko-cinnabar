@@ -383,6 +383,12 @@ void InputReader::removeDeviceLocked(nsecs_t when, int32_t deviceId) {
     mDevices.removeItemsAt(deviceIndex, 1);
     bumpGenerationLocked();
 
+    uint32_t classes = device->getClasses();
+    // Cursor-like devices.
+    if (classes & INPUT_DEVICE_CLASS_CURSOR) {
+        mQueuedListener->SetMouseDevice(false);
+    }
+
     if (device->isIgnored()) {
         ALOGI("Device removed: id=%d, name='%s' (ignored non-input device)",
                 device->getId(), device->getName().string());
@@ -438,6 +444,7 @@ InputDevice* InputReader::createDeviceLocked(int32_t deviceId,
     // Cursor-like devices.
     if (classes & INPUT_DEVICE_CLASS_CURSOR) {
         device->addMapper(new CursorInputMapper(device));
+        mQueuedListener->SetMouseDevice(true);
     }
 
     // Touchscreens and touchpad devices.

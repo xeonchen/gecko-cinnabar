@@ -161,6 +161,29 @@ nsWindow::DispatchTouchInput(MultiTouchInput& aInput)
     gFocusedWindow->DispatchTouchInputViaAPZ(aInput);
 }
 
+/*static*/ void
+nsWindow::SetMouseDevice(bool aMouse)
+{
+    if (gFocusedWindow) {
+        gFocusedWindow->SetDrawMouse(aMouse);
+        ScreenIntPoint point(0,0);
+        nsWindow::NotifyHoverMove(point);
+    }
+}
+
+/*static*/ void
+nsWindow::NotifyHoverMove(const ScreenIntPoint& point)
+{
+    if (gFocusedWindow) {
+        // NB: this is a racy use of gFocusedWindow.  We assume that
+        // our one and only top widget is already in a stable state by
+        // the time we start receiving hover-move events.
+        gFocusedWindow->SetScreenIntPoint(point);
+        gFocusedWindow->mCompositorBridgeParent->InvalidateOnCompositorThread();
+        gFocusedWindow->mCompositorBridgeParent->ScheduleRenderOnCompositorThread();
+    }
+}
+
 class DispatchTouchInputOnMainThread : public nsRunnable
 {
 public:

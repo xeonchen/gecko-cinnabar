@@ -178,5 +178,9 @@ void QueuedInputListener::flush() {
     mArgsQueue.clear();
 }
 
+void QueuedInputListener::SetMouseDevice(bool aMouse)
+{
+  mInnerListener->SetMouseDevice(aMouse);
+}
 
 } // namespace android

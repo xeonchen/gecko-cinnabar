@@ -53,6 +53,7 @@ public:
   void DispatchTouchMoveEvents(TimeStamp aVsyncTime);
   void NotifyVsync(TimeStamp aVsyncTimestamp);
   void SetCompositorVsyncScheduler(layers::CompositorVsyncScheduler* aObserver);
+  void SetMouseDevice(bool aMouseAvailable);
 
 protected:
   ~GeckoTouchDispatcher() {}
@@ -80,6 +81,10 @@ private:
   TimeDuration mVsyncAdjust;     // Time from vsync we create sample times from
   TimeDuration mMaxPredict;      // How far into the future we're allowed to extrapolate
   TimeDuration mMinDelta;        // Minimal time difference between touches for resampling
+
+  // While mouse was plugged, mMouseAvailable is set as true.
+  // And send mouse operation by mousetouch event.
+  bool mMouseAvailable;
 
   // Amount of time between vsync and the last event that is required before we
   // resample

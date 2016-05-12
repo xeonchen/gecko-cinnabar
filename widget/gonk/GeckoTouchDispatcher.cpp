@@ -67,6 +67,7 @@ GeckoTouchDispatcher::GeckoTouchDispatcher()
   , mHavePendingTouchMoves(false)
   , mInflightNonMoveEvents(0)
   , mTouchEventsFiltered(false)
+  , mMouseAvailable(false)
 {
   // Since GeckoTouchDispatcher is initialized when input is initialized
   // and reads gfxPrefs, it is the first thing to touch gfxPrefs.
@@ -107,6 +108,16 @@ GeckoTouchDispatcher::NotifyTouch(MultiTouchInput& aTouch, TimeStamp aEventTime)
   if (mCompositorVsyncScheduler) {
     mCompositorVsyncScheduler->SetNeedsComposite();
   }
+
+  if (aTouch.mType == MultiTouchInput::MULTITOUCH_HOVER_MOVE) {
+    // NB: we could dispatch this to content as a mousemove event, if
+    // we really wanted to.  But for now we just use this to draw a
+    // mouse cursor so keep it internal to gecko.
+    ScreenIntPoint point = aTouch.mTouches[0].mScreenPoint;
+    nsWindow::NotifyHoverMove(point);
+    return;
+  }
+
 
   if (aTouch.mType == MultiTouchInput::MULTITOUCH_MOVE) {
     MutexAutoLock lock(mTouchQueueLock);
@@ -179,6 +190,12 @@ GeckoTouchDispatcher::DispatchTouchMoveEvents(TimeStamp aVsyncTime)
     } else {
       ResampleTouchMoves(touchMove, aVsyncTime);
     }
+  }
+
+  if (mMouseAvailable)
+  {
+    ScreenIntPoint point = touchMove.mTouches[0].mScreenPoint;
+    nsWindow::NotifyHoverMove(point);
   }
 
   DispatchTouchEvent(touchMove);
@@ -338,6 +355,7 @@ GeckoTouchDispatcher::DispatchTouchEvent(MultiTouchInput aMultiTouch)
         touchAction = "Touch_Event_Down";
         break;
       case MultiTouchInput::MULTITOUCH_MOVE:
+      case MultiTouchInput::MULTITOUCH_HOVER_MOVE:
         touchAction = "Touch_Event_Move";
         break;
       case MultiTouchInput::MULTITOUCH_END:
@@ -350,6 +368,12 @@ GeckoTouchDispatcher::DispatchTouchEvent(MultiTouchInput aMultiTouch)
     TouchDataPayload* payload = new TouchDataPayload(touchPoint);
     PROFILER_MARKER_PAYLOAD(touchAction, payload);
   }
+}
+
+void GeckoTouchDispatcher::SetMouseDevice(bool aMouseAvailable)
+{
+  mMouseAvailable = aMouseAvailable; 
+  nsWindow::SetMouseDevice(aMouseAvailable);
 }
 
 } // namespace mozilla
