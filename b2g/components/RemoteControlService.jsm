@@ -240,6 +240,10 @@ this.RemoteControlService = {
         break;
       case "remote-control-pin-dismissed":
         this.clearPIN();
+        // Notify all event handler PIN dismiss
+        this._connections.forEach(function(aConnection){
+          aConnection.eventHandler.handlePINDismissed();
+        });
         break;
    }
   },
@@ -670,6 +674,17 @@ EventHandler.prototype = {
     }
   },
 
+  // Notify from system app PIN code is dismissed
+  handlePINDismissed: function() {
+    // If event handler's status is in ROUND_2 and first connection (no clientID),
+    // it means user is typing PIN code for JPAKE round 2.
+    // Old PIN code is invalid now, send PIN expire error and trigger client reconnection.
+    if(this._status === EVENT_HANDLER_STATUS.ROUND_2 && this._clientID === null) {
+      DEBUG && debug("Receive PIN dimiss from system app");
+      this._handleError(this, "auth", "PIN expire");
+    }
+  },
+
   _handleAuthEvent: function(aEvent) {
     switch (aEvent.action) {
       case "request_handshake":
@@ -786,7 +801,7 @@ EventHandler.prototype = {
       pin = this._server.getPIN();
       if (pin === null) {
         // Maybe some other client already used the PIN then clean it
-        DEBUG && debug("PN expire");
+        DEBUG && debug("PIN expire");
         this._handleError(this, aEvent.type, "PIN expire");
         return;
       }
