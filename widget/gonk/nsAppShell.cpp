@@ -761,7 +761,8 @@ GeckoInputDispatcher::notifyMotion(const NotifyMotionArgs* args)
         break;
     case AMOTION_EVENT_ACTION_HOVER_EXIT:
     case AMOTION_EVENT_ACTION_HOVER_ENTER:
-        NS_WARNING("Ignoring hover touch events");
+    case AMOTION_EVENT_ACTION_SCROLL:
+        NS_WARNING("Ignoring hover touch and scroll events");
         return;
     default:
         MOZ_ASSERT_UNREACHABLE("Could not assign a touch type");
