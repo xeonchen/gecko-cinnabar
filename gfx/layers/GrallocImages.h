@@ -71,6 +71,7 @@ public:
   void AdoptData(TextureClient* aGraphicBuffer, const gfx::IntSize& aSize);
 
   // From [android 4.0.4]/hardware/msm7k/libgralloc-qsd8k/gralloc_priv.h
+  // and [lollipop-release]/hardware/intel/img/hwcomposer/include/pvr/hal/hal_public.h
   enum {
     /* OEM specific HAL formats */
     HAL_PIXEL_FORMAT_YCbCr_422_P            = 0x102,
@@ -79,6 +80,8 @@ public:
     HAL_PIXEL_FORMAT_YCrCb_420_SP_ADRENO    = 0x10A,
     HAL_PIXEL_FORMAT_YCbCr_420_SP_TILED     = 0x7FA30C03,
     HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS     = 0x7FA30C04,
+    HAL_PIXEL_FORMAT_NV12_VED               = 0x7FA00E00,
+    HAL_PIXEL_FORMAT_NV12_VEDT              = 0x7FA00F00,
   };
 
   enum {
