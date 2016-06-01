@@ -136,6 +136,9 @@ public:
 
     nsScreenGonk* GetScreen();
 
+    // Call this function after remote control use nsContentUtils::SendMouseEvent
+    virtual void SetMouseCursorPosition(const ScreenIntPoint& aScreenIntPoint) override;
+
 protected:
     nsWindow* mParent;
     bool mVisible;

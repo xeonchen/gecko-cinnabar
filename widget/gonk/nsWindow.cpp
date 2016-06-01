@@ -134,6 +134,21 @@ nsWindow::ConfigureAPZControllerThread()
     APZThreadUtils::SetControllerThread(CompositorBridgeParent::CompositorLoop());
 }
 
+void
+nsWindow::SetMouseCursorPosition(const ScreenIntPoint& aScreenIntPoint)
+{
+    // The only implementation of nsIWidget::SetMouseCursorPosition in nsWindow
+    // is for remote control.
+    if (gFocusedWindow) {
+        // NB: this is a racy use of gFocusedWindow.  We assume that
+        // our one and only top widget is already in a stable state by
+        // the time we start receiving mousemove events.
+        gFocusedWindow->SetScreenIntPoint(aScreenIntPoint);
+        gFocusedWindow->mCompositorBridgeParent->InvalidateOnCompositorThread();
+        gFocusedWindow->mCompositorBridgeParent->ScheduleRenderOnCompositorThread();
+    }
+}
+
 /*static*/ nsEventStatus
 nsWindow::DispatchKeyInput(WidgetKeyboardEvent& aEvent)
 {

@@ -7762,6 +7762,13 @@ nsContentUtils::SendMouseEvent(nsCOMPtr<nsIPresShell> aPresShell,
     msg = eMouseUp;
   } else if (aType.EqualsLiteral("mousemove")) {
     msg = eMouseMove;
+#ifdef MOZ_WIDGET_GONK
+    // If need to draw mouse cursor, set point then force composition
+    if(widget->GetDrawVirtualMouse()) {
+      ScreenIntPoint point(floor(aX+0.5), floor(aY+0.5));
+      widget->SetMouseCursorPosition(point);
+    }
+#endif
   } else if (aType.EqualsLiteral("mouseover")) {
     msg = eMouseEnterIntoWidget;
   } else if (aType.EqualsLiteral("mouseout")) {
@@ -7773,7 +7780,15 @@ nsContentUtils::SendMouseEvent(nsCOMPtr<nsIPresShell> aPresShell,
     contextMenuKey = (aButton == 0);
   } else if (aType.EqualsLiteral("MozMouseHittest")) {
     msg = eMouseHitTest;
-  } else {
+  }
+#ifdef MOZ_WIDGET_GONK
+  else if (aType.EqualsLiteral("MozEnableDrawCursor")) {
+    widget->SetDrawVirtualMouse(true);
+  } else if (aType.EqualsLiteral("MozDisableDrawCursor")) {
+    widget->SetDrawVirtualMouse(false);
+  }
+#endif
+  else {
     return NS_ERROR_FAILURE;
   }
 

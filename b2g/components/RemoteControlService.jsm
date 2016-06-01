@@ -236,7 +236,13 @@ this.RemoteControlService = {
       case "control-mode-changed":
         // Use mozContentEvent to receive control mode of current app from System App
         // remote_command.js use "getIsCursorMode" to determine what kind event should dispatch to app
-        this._isCursorMode = detail.detail.cursor;
+        // Add null check when system app initialization, cursor is null
+        let isCursorMode = (detail.detail.cursor === null)?false:detail.detail.cursor;
+        if (isCursorMode !== this._isCursorMode) {
+          this._isCursorMode = isCursorMode;
+          // Update mouse cursor when control mode changed
+          this.updateMouseCursor();
+        }
         break;
       case "remote-control-pin-dismissed":
         this.clearPIN();
@@ -274,6 +280,9 @@ this.RemoteControlService = {
       var conn = new Connection(input, output, this, connectionId);
       let handler = new EventHandler(conn);
 
+      // Update mouse cursor when establish a new connection
+      this.updateMouseCursor();
+
       input.asyncWait(conn, 0, 0, Services.tm.mainThread);
     } catch (e) {
       DEBUG && debug("Error in initial connection: " + e);
@@ -292,6 +301,21 @@ this.RemoteControlService = {
     this._connections.forEach(function(aConnection){
       aConnection.close();
     });
+  },
+
+  updateMouseCursor: function() {
+    let window = Services.wm.getMostRecentWindow("navigator:browser");
+    let utils = window.QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIDOMWindowUtils);
+    let x = isNaN(parseInt(this._getSharedState("x"))) ? 0 : parseInt(this._getSharedState("x"));
+    let y = isNaN(parseInt(this._getSharedState("y"))) ? 0 : parseInt(this._getSharedState("y"));
+
+    if (this._isCursorMode && this._connections.size > 0) {
+      // Enable mouse cursor if it's in cursor mode and there is user connected.
+      utils.sendMouseEvent("MozEnableDrawCursor", x, y, 0, 0, 0);
+    } else {
+      // Disable mouse cursor
+      utils.sendMouseEvent("MozDisableDrawCursor", x, y, 0, 0, 0);
+    }
   },
 
   // PRIVATE FUNCTIONS
@@ -482,6 +506,8 @@ Connection.prototype = {
     this._closed = true;
 
     this.server._connectionClosed(this.connectionId);
+    // Update mouse cursor when connection closed
+    this.server.updateMouseCursor();
   },
 
   sendMsg: function(aMessage) {

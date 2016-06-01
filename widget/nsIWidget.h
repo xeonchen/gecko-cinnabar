@@ -2087,8 +2087,21 @@ public:
     virtual void SetDrawMouse(bool aDrawMouse)
     { mDrawMouse = aDrawMouse; }
 
+    virtual void SetDrawVirtualMouse(bool aDrawVirtualMouse)
+    { mDrawVirtualMouse = aDrawVirtualMouse; }
+
     virtual bool GetDrawMouse()
-    { return mDrawMouse; }
+    { return mDrawMouse || mDrawVirtualMouse; }
+
+    virtual bool GetDrawVirtualMouse()
+    { return mDrawVirtualMouse; }
+
+    /**
+     * For remote control draw mouse cursor in nsContentUtils.
+     * widget/gonk/nsWindow.cpp has real implementation.
+     * Otherwise, use empty implementation.
+     */
+    virtual void SetMouseCursorPosition(const ScreenIntPoint& aScreenIntPoint) { };
 
 protected:
     /**
@@ -2116,6 +2129,7 @@ protected:
     // over this widget.
     ScreenIntPoint mScreenPoint;
     bool mDrawMouse;
+    bool mDrawVirtualMouse;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIWidget, NS_IWIDGET_IID)
