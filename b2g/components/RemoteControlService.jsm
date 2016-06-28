@@ -693,6 +693,10 @@ EventHandler.prototype = {
         // Implement control command dispatch
         this._handleCommandEvent(aEvent);
         break;
+      case "ack":
+        // Implement ack for connection status detection
+        this._handleAckEvent(aEvent);
+        break;
       default:
         // Not accepted event type, report error to client
         this._handleError(this, "common", "Not accepted event type");
@@ -990,6 +994,26 @@ EventHandler.prototype = {
       sandbox.handleEvent(aEvent);
     } catch (e) {
       DEBUG && debug("Error running remote_command.js :" + e);
+    }
+  },
+
+  _handleAckEvent: function(aEvent) {
+    // If event handler is not ready to receive command, drop this event
+    if (this._status != EVENT_HANDLER_STATUS.COMMAND) {
+      DEBUG && debug("Status not in COMMAND, drop the event");
+      this._handleError(this, aEvent.type, "Wrong status");
+      return;
+    }
+
+    if (aEvent.detail && aEvent.detail == "ping") {
+      let reply = {
+        type: aEvent.type,
+        detail: "pong"
+      };
+
+      this._connection.sendMsg(reply);
+    } else {
+      this._handleError(this, aEvent.type, "Wrong detail");
     }
   },
 
