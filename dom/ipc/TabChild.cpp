@@ -109,6 +109,7 @@
 #include "nsIScriptError.h"
 #include "mozilla/EventForwards.h"
 #include "nsDeviceContext.h"
+#include "nsSandboxFlags.h"
 #include "FrameLayerBuilder.h"
 
 #define BROWSER_ELEMENT_CHILD_SCRIPT \
@@ -876,6 +877,11 @@ TabChild::NotifyTabContextUpdated()
                              nsIDocShell::FRAME_TYPE_APP :
                              nsIDocShell::FRAME_TYPE_REGULAR);
   nsDocShell::Cast(docShell)->SetOriginAttributes(OriginAttributesRef());
+
+  // Set SANDBOXED_AUXILIARY_NAVIGATION flag if this is a receiver page.
+  if (!PresentationURL().IsEmpty()) {
+    docShell->SetSandboxFlags(SANDBOXED_AUXILIARY_NAVIGATION);
+  }
 }
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION_INHERITED(TabChild)
