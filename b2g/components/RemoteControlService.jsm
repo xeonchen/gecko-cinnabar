@@ -140,7 +140,7 @@ this.RemoteControlService = {
     Services.obs.removeObserver(this, "xpcom-shutdown");
 
     if (this._mDNSRegistrationHandle) {
-      this._mDNSRegistrationHandle.Cancel(Cr.NS_OK);
+      this._mDNSRegistrationHandle.cancel(Cr.NS_OK);
       this._mDNSRegistrationHandle = null;
     }
 

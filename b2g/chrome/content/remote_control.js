@@ -31,5 +31,46 @@ const kPrefPresentationDiscoverable = "dom.presentation.discoverable";
 
   Services.prefs.addObserver(kPrefPresentationDiscoverable, setupRemoteControl, false);
 
+  var networkStatusMonitor = {
+    // nsIObserver
+    observe: function(subject, topic, data) {
+      switch (topic) {
+        case "network-active-changed": {
+          if (!subject) {
+            // Stop service when there is no active network
+            remoteControlScope.RemoteControlService.stop();
+            break;
+          }
+
+          // Start service when active network change with new IP address
+          // Other case will be handled by "network:offline-status-changed"
+          if (!Services.io.offline && Services.prefs.getBoolPref(kPrefPresentationDiscoverable)) {
+            importRemoteControlService();
+            remoteControlScope.RemoteControlService.start();
+          }
+          break;
+        }
+        case "network:offline-status-changed": {
+          if (data == "offline") {
+            // Stop service when network status change to offline
+            remoteControlScope.RemoteControlService.stop();
+          } else if (Services.prefs.getBoolPref(kPrefPresentationDiscoverable)) {
+            // Resume service when network status change to online
+            importRemoteControlService();
+            remoteControlScope.RemoteControlService.start();
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  };
+
+  if (Ci.nsINetworkManager) {
+    Services.obs.addObserver(networkStatusMonitor, "network-active-changed", false);
+    Services.obs.addObserver(networkStatusMonitor, "network:offline-status-changed", false);
+  }
+
   setupRemoteControl();
 })();
