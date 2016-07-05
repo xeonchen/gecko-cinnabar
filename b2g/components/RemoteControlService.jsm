@@ -186,7 +186,7 @@ this.RemoteControlService = {
       hmacKey: aHMAC256Key,
     };
 
-    Services.prefs.setCharPref(REMOTECONTROL_PREF_DEVICES, JSON.stringify(this._pairedDevices));
+    this._flushPairedDevices();
 
     return uuidString;
   },
@@ -205,7 +205,7 @@ this.RemoteControlService = {
         aesKey: aAES256Key,
         hmacKey: aHMAC256Key,
       };
-      Services.prefs.setCharPref(REMOTECONTROL_PREF_DEVICES, JSON.stringify(this._pairedDevices));
+      this._flushPairedDevices();
     }
   },
 
@@ -344,7 +344,7 @@ this.RemoteControlService = {
 
       // Empty paired devices
       this._pairedDevices = {};
-      Services.prefs.setCharPref(REMOTECONTROL_PREF_DEVICES, JSON.stringify(this._pairedDevices));
+      this._flushPairedDevices();
     }
 
     // Internal functions export to remote_command.js
@@ -458,6 +458,13 @@ this.RemoteControlService = {
 
   _getIsCursorMode: function() {
     return RemoteControlService._isCursorMode;
+  },
+
+  _flushPairedDevices: function() {
+    let data = JSON.stringify(this._pairedDevices);
+    Services.prefs.setCharPref(REMOTECONTROL_PREF_DEVICES, data);
+    // This preference is consulted during startup.
+    Services.prefs.savePrefFile(null);
   },
 };
 
