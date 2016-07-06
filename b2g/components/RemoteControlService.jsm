@@ -259,6 +259,13 @@ this.RemoteControlService = {
     DEBUG && debug("onSocketAccepted(aSocket=" + aSocket + ", aTrans=" + aTrans + ")");
     DEBUG && debug("New connection on " + aTrans.host + ":" + aTrans.port);
 
+    if (this._connections.size >= MAX_CLIENT_CONNECTIONS) {
+      DEBUG && debug("Reach max " + MAX_CLIENT_CONNECTIONS +
+                     "connections already, drop the new one.");
+      aTrans.close(Cr.NS_BINDING_ABORTED);
+      return;
+    }
+
     const SEGMENT_SIZE = 8192;
     const SEGMENT_COUNT = 1024;
 
