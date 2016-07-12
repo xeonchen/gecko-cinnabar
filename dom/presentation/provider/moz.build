@@ -15,6 +15,12 @@ UNIFIED_SOURCES += [
     'PresentationDeviceProviderModule.cpp',
 ]
 
+EXTRA_JS_MODULES.presentation += [
+    'ControllerStateMachine.jsm',
+    'ReceiverStateMachine.jsm',
+    'StateMachineHelper.jsm',
+]
+
 include('/ipc/chromium/chromium-config.mozbuild')
 FINAL_LIBRARY = 'xul'
 
