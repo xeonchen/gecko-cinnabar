@@ -987,6 +987,7 @@ pref("identity.sync.tokenserver.uri", "https://token.services.mozilla.com/1.0/sy
 // Enable Presentation API
 pref("dom.presentation.enabled", true);
 pref("dom.presentation.discovery.enabled", true);
+pref("dom.presentation.discovery.legacy.enabled", true); // for TV 2.5 backward capability
 
 // TODO : remove it after landing bug1242874 because now it's the only way to
 // suspend the MediaElement.
