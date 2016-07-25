@@ -65,8 +65,8 @@ const REMOTECONTROL_PREF_COMMANDJS_PATH = "chrome://b2g/content/remote_command.j
 const REMOTECONTROL_PREF_DEVICES = "remotecontrol.paired_devices";
 const REMOTE_CONTROL_EVENT = "mozChromeRemoteControlEvent";
 
+const PINCODE_ERROR_LIMIT = 5;
 const PINCODE_LENGTH = 4;
-const FINGERPRINT_LENGTH = 12;
 const TV_SIGNER_ID = "server";
 const CLIENT_SIGNER_ID = "client";
 // Extra input to SHA256-HMAC in generate entry, includes the full crypto spec.
@@ -157,9 +157,29 @@ this.RemoteControlService = {
   // Generate PIN code for pairing, format is 4 digits
   // 0000 and random generated number to a new string
   // Then get last 4 characters as new PIN code
+  // Return -1 if Web Cryptography API has more than 5 error
   generatePIN: function() {
+    let count = 0;
+    do {
+      try {
+        // Generate a random number in [0, 2^16 - 1]
+        let random = new Uint16Array(1);
+        let crypto = Services.wm.getMostRecentWindow("navigator:browser").crypto;
+        crypto.getRandomValues(random);
+        // Get last needed digits of the random number
+        this._pin = random[0] % Math.pow(10, PINCODE_LENGTH);
+      } catch(e) {
+        debug("Fail to get random from Web Cryptography API: " + e);
+        this._pin = null;
+        if(++count >= PINCODE_ERROR_LIMIT) {
+          return -1;
+        }
+      }
+    } while(!this._pin); // Make sure this._pin exists and it's not zero
+
     let padding = new Array(PINCODE_LENGTH + 1).join('0');
-    this._pin = (padding + Math.floor(Math.random() * Math.pow(10, PINCODE_LENGTH))).slice(-1 * PINCODE_LENGTH);
+    this._pin = (padding + this._pin).slice(-1 * PINCODE_LENGTH);
+
     return this._pin;
   },
 
@@ -371,8 +391,8 @@ this.RemoteControlService = {
           aReject("getOrCreateCert " + result);
           return;
         } else {
-          // Store first 12 characters of server certifications for authentication weak secret
-          self._certFingerprint = cert.sha256Fingerprint.slice(0, FINGERPRINT_LENGTH);
+          // Store server certificate for authentication weak secret
+          self._certFingerprint = cert.sha256Fingerprint;
 
           try {
             // Try to get random port
@@ -632,6 +652,29 @@ function base64ToArrayBuffer(abase64) {
   return bytes.buffer;
 }
 
+// Synthesize the PIN for JPAKE round 2
+// The SHA256 is used to make sure the data string is in certain ranges
+// Return binary data
+function SHA256(aStr) {
+  // data is an array of bytes
+  let data = bytesFromString(aStr);
+  let cryptoHash = Components.classes["@mozilla.org/security/hash;1"]
+                   .createInstance(Components.interfaces.nsICryptoHash);
+  // Use the SHA256 algorithm
+  cryptoHash.init(cryptoHash.SHA256);
+  cryptoHash.update(data, data.length);
+  // Pass false here to get binary data back
+  return cryptoHash.finish(false);
+}
+
+function bytesFromString(aStr) {
+  let converter =
+        Components.classes["@mozilla.org/intl/scriptableunicodeconverter"]
+        .createInstance(Components.interfaces.nsIScriptableUnicodeConverter);
+  converter.charset = "UTF-8";
+  return converter.convertToByteArray(aStr);
+}
+
 // Load remote_command.js to commandJSSandbox when receives command event
 // Release sandbox in RemoteControlService.stop()
 function getCommandJSSandbox(aImportFunctions) {
@@ -788,8 +831,15 @@ EventHandler.prototype = {
       let pin = this._server.getPIN();
       if(pin === null) {
         pin = this._server.generatePIN();
-        // Show notification on screen
-        SystemAppProxy._sendCustomEvent(REMOTE_CONTROL_EVENT, { pincode: pin, action: 'pin-created' });
+        if (pin != -1) {
+          // Show notification on screen
+          SystemAppProxy._sendCustomEvent(REMOTE_CONTROL_EVENT, { pincode: pin, action: 'pin-created' });
+        } else {
+          // Notify the client that we can't generate a secure random PIN
+          DEBUG && debug("Unable to generate a secure random PIN");
+          this._handleError(this, aEvent.type, "No secure PIN");
+          return;
+        }
       }
     }
 
@@ -838,9 +888,8 @@ EventHandler.prototype = {
     let pin = null;
 
     if (this._clientID !== null) {
-      // Not first time connection, use first 4 characters of previous AES key as PIN code
-      // Full AES key + TLS server cert is too long, round2 will throw error
-      pin = this._aes256B64.value.slice(0, PINCODE_LENGTH);
+      // Not first time connection, use previous AES key as PIN code
+      pin = this._aes256B64.value;
     } else {
       pin = this._server.getPIN();
       if (pin === null) {
@@ -851,8 +900,8 @@ EventHandler.prototype = {
       }
     }
 
-    // Secret is PIN + first 12 characters of TLS server cert fingerprint
-    let secret = pin + this._server.getCertFingerprint();
+    // Synthesize PIN for JPAKE round 2
+    let secret = this._synthesizeJPAKEPIN(pin);
 
     try {
       this._JPAKE.round2(CLIENT_SIGNER_ID, secret,
@@ -948,6 +997,14 @@ EventHandler.prototype = {
       DEBUG && debug("Import HMAC key error: " + err);
       self._handleError(self, aEvent.type, "Import HMAC key error: " + err);
     });
+  },
+
+  // Synthesize PIN for J-PAKE round 2 by original PIN
+  // and TLS server certificate fingerprint
+  _synthesizeJPAKEPIN: function(aPIN) {
+    let hash = SHA256(aPIN + this._server.getCertFingerprint());
+    // Ignore the highest order bit to make sure this value < 256-bit value
+    return String.fromCharCode(hash.charCodeAt(0) & 0x7F) + hash.slice(1);
   },
 
   _handleKeyConfirmEvent: function(aEvent) {
