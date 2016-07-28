@@ -20,57 +20,115 @@ const kPrefPresentationDiscoverable = "dom.presentation.discoverable";
     }
   }
 
-  function setupRemoteControl() {
-    if (Services.prefs.getBoolPref(kPrefPresentationDiscoverable)) {
-      importRemoteControlService();
-      remoteControlScope.RemoteControlService.start();
-    } else {
-      remoteControlScope.RemoteControlService.stop();
-    }
+  function getTime() {
+    return new Date().getTime();
   }
 
-  Services.prefs.addObserver(kPrefPresentationDiscoverable, setupRemoteControl, false);
+  function debug(s) {
+    let time = new Date(getTime()).toString();
+    // dump("[" + time + "] remote_control: " + s + "\n");
+  }
 
-  var networkStatusMonitor = {
-    // nsIObserver
-    observe: function(subject, topic, data) {
+  // Monitor the network status and the time change
+  var statusMonitor = {
+    init: function sm_init() {
+      debug("init");
+
+      // Monitor the preference change
+      Services.prefs.addObserver(kPrefPresentationDiscoverable, this, false);
+      // Monitor the network change by nsIIOService
+      Services.obs.addObserver(this, "network:offline-status-changed", false);
+#ifdef MOZ_WIDGET_GONK
+      // Monitor the time change on Gonk platform
+      window.addEventListener('moztimechange', this.onTimeChange);
+      // Monitor the network change by nsINetworkManager
+      if (Ci.nsINetworkManager) {
+        Services.obs.addObserver(this, "network-active-changed", false);
+      }
+#endif
+      // Start the service on booting up
+      if (!this.startService()) {
+        this.stopService();
+      }
+    },
+
+    observe: function sm_observe(subject, topic, data) {
+      debug("observe: " + topic + ", " + data);
+
       switch (topic) {
+#ifdef MOZ_WIDGET_GONK
         case "network-active-changed": {
           if (!subject) {
             // Stop service when there is no active network
-            remoteControlScope.RemoteControlService.stop();
+            this.stopService();
             break;
           }
 
           // Start service when active network change with new IP address
           // Other case will be handled by "network:offline-status-changed"
-          if (!Services.io.offline && Services.prefs.getBoolPref(kPrefPresentationDiscoverable)) {
-            importRemoteControlService();
-            remoteControlScope.RemoteControlService.start();
+          if (!Services.io.offline) {
+            this.startService();
           }
+
           break;
         }
+#endif
         case "network:offline-status-changed": {
           if (data == "offline") {
             // Stop service when network status change to offline
-            remoteControlScope.RemoteControlService.stop();
-          } else if (Services.prefs.getBoolPref(kPrefPresentationDiscoverable)) {
+            this.stopService();
+          } else { // online
             // Resume service when network status change to online
-            importRemoteControlService();
-            remoteControlScope.RemoteControlService.start();
+            this.startService();
           }
+          break;
+        }
+        case "nsPref:changed": {
+          if (data != kPrefPresentationDiscoverable) {
+            break;
+          }
+
+          // Start service if discoverable is true. Otherwise stop service.
+          if (!this.startService()) {
+            this.stopService();
+          }
+
           break;
         }
         default:
           break;
       }
-    }
+    },
+#ifdef MOZ_WIDGET_GONK
+    onTimeChange: function sm_onTimeChange() {
+      debug("onTimeChange");
+      // Notice remote-control service the time is changed
+      this.discoverable &&
+      remoteControlScope.RemoteControlService &&
+      remoteControlScope.RemoteControlService.onTimeChange(getTime());
+    },
+#endif
+    startService: function sm_startService() {
+      debug("startService");
+      // Start only when presentation is discoverable
+      if (this.discoverable) {
+        importRemoteControlService();
+        remoteControlScope.RemoteControlService.start();
+        return true;
+      }
+      return false;
+    },
+
+    stopService: function sm_stopService() {
+      debug("stopService");
+      remoteControlScope.RemoteControlService &&
+      remoteControlScope.RemoteControlService.stop();
+    },
+
+    get discoverable() {
+      return Services.prefs.getBoolPref(kPrefPresentationDiscoverable);
+    },
   };
 
-  if (Ci.nsINetworkManager) {
-    Services.obs.addObserver(networkStatusMonitor, "network-active-changed", false);
-    Services.obs.addObserver(networkStatusMonitor, "network:offline-status-changed", false);
-  }
-
-  setupRemoteControl();
+  statusMonitor.init();
 })();

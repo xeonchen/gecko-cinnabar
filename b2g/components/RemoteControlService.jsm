@@ -67,6 +67,7 @@ const REMOTE_CONTROL_EVENT = "mozChromeRemoteControlEvent";
 
 const PINCODE_ERROR_LIMIT = 5;
 const PINCODE_LENGTH = 4;
+const SERVICE_CERT = "RemoteControlService";
 const TV_SIGNER_ID = "server";
 const CLIENT_SIGNER_ID = "client";
 // Extra input to SHA256-HMAC in generate entry, includes the full crypto spec.
@@ -345,6 +346,35 @@ this.RemoteControlService = {
     }
   },
 
+#ifdef MOZ_WIDGET_GONK
+  // Refresh the certificate when the time is updated.
+  // The getOrCreateCert will validate the certificate itself.
+  // When current time > cert's expired day + one day
+  // or the current time < cert's started day, the certificate is invalid.
+  // Otherwise we can continue to use the old valid one.
+  onTimeChange: function(aTimestamp) {
+    DEBUG && debug("time is updated to: " + new Date(aTimestamp).toString());
+
+    // Do nothing if the service doesn't be started
+    if (this._serverStatus == SERVER_STATUS.STOPPED) {
+      return;
+    }
+
+    let self = this;
+    certService.getOrCreateCert(SERVICE_CERT, {
+      handleCert: function(cert, result) {
+        if(result) {
+          DEBUG && debug("Fail to get service certificate");
+        } else if(cert.sha256Fingerprint != self._certFingerprint) {
+          // If the certificate needs to be updated, then restart the service
+          self.stop();
+          self.start();
+        }
+      }
+    });
+  },
+#endif
+
   // PRIVATE FUNCTIONS
   _doStart: function(aResolve, aReject) {
     DEBUG && debug("doStart");
@@ -353,8 +383,6 @@ this.RemoteControlService = {
       aReject("SocketAlreadyInit");
       return;
     }
-
-    let self = this;
 
     // Monitor xpcom-shutdown to stop service and clean up
     Services.obs.addObserver(this, "xpcom-shutdown", false);
@@ -381,84 +409,143 @@ this.RemoteControlService = {
       "getIsCursorMode": this._getIsCursorMode,
     }
 
-    // Start TLSSocketServer with self-signed certification
-    // If there is no module use PSM before, handleCert result is SEC_ERROR_NO_MODULE (0x805A1FC0).
-    // Get PSM here ensure certService.getOrCreateCert works properly.
-    Cc["@mozilla.org/psm;1"].getService(Ci.nsISupports);
-    certService.getOrCreateCert("RemoteControlService", {
-      handleCert: function(cert, result) {
-        if(result) {
-          aReject("getOrCreateCert " + result);
-          return;
-        } else {
-          // Store server certificate for authentication weak secret
-          self._certFingerprint = cert.sha256Fingerprint;
+    let self = this;
+    this._getCertificate().then(function(aCertificate){
+      // Store server certificate to synthesize PIN for JPAKE round2
+      self._certFingerprint = aCertificate.sha256Fingerprint;
 
-          try {
-            // Try to get random port
-            let ios = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
-            let socket;
-            for (let i = 100; i; i--) {
-              let temp = Cc["@mozilla.org/network/tls-server-socket;1"].createInstance(Ci.nsITLSServerSocket);
-              temp.init(self._port, false, MAX_CLIENT_CONNECTIONS);
-              temp.serverCert = cert;
-
-              let allowed = ios.allowPort(temp.port, "tls");
-              if (!allowed) {
-                DEBUG && debug("Warning: obtained TLSServerSocket listens on a blocked port: " + temp.port);
-              }
-
-              if (!allowed && self._port == -1) {
-                DEBUG && debug("Throw away TLSServerSocket with bad port.");
-                temp.close();
-                continue;
-              }
-
-              socket = temp;
-              break;
-            }
-
-            if (!socket) {
-              throw new Error("No socket server available. Are there no available ports?");
-            }
-
-            DEBUG && debug("Listen on port " + socket.port + ", " + MAX_CLIENT_CONNECTIONS + " pending connections");
-
-            socket.serverCert = cert;
-            // Set session cache and tickets to false here.
-            // Cache disconnects fennect addon when addon sends message
-            // Tickets crashes b2g when fennec addon connects
-            socket.setSessionCache(false);
-            socket.setSessionTickets(false);
-            socket.setRequestClientCertificate(Ci.nsITLSServerSocket.REQUEST_NEVER);
-
-            socket.asyncListen(self);
-            self._port = socket.port;
-            self._serverSocket = socket;
-          } catch (e) {
-            DEBUG && debug("Could not start server on port " + self._port + ": " + e);
-            aReject("Start TLSSocketServer fail");
-            return;
-          }
-
-          // Register mDNS remote control service with this._port
-          if (("@mozilla.org/toolkit/components/mdnsresponder/dns-sd;1" in Cc)) {
-            let serviceInfo = Cc["@mozilla.org/toolkit/components/mdnsresponder/dns-info;1"]
-                                .createInstance(Ci.nsIDNSServiceInfo);
-            serviceInfo.serviceType = REMOTECONTROL_PREF_MDNS_SERVICE_TYPE;
-            serviceInfo.serviceName = Services.prefs.getCharPref(REMOTECONTROL_PREF_MDNS_SERVICE_NAME);
-            serviceInfo.port = self._port;
-
-            let mdns = Cc["@mozilla.org/toolkit/components/mdnsresponder/dns-sd;1"]
-                         .getService(Ci.nsIDNSServiceDiscovery);
-            self._mDNSRegistrationHandle = mdns.registerService(serviceInfo, null);
-          }
-
-          aResolve();
-          self._serverStatus = SERVER_STATUS.STARTED;
-        }
+      if (!self._createSocket(aCertificate)) {
+        aReject("Start TLSSocketServer fail");
+        return;
       }
+
+      let registrationListener = {
+        onServiceRegistered: function() {
+          DEBUG && debug ("Register service on port: " + self._port + " successfully");
+          self._serverStatus = SERVER_STATUS.STARTED;
+          aResolve();
+        },
+        onRegistrationFailed: function() {
+          DEBUG && debug ("Fail to register service");
+          aReject("Fail to register service");
+        },
+      };
+
+      self._registerService(registrationListener);
+    }).catch(function(aError) {
+      aReject(aError);
+      return;
     });
+  },
+
+  // Get certificate to establish TLS channel
+  _getCertificate: function() {
+    return new Promise(function(aResolve, aReject) {
+      // Start TLSSocketServer with self-signed certification
+      // If there is no module use PSM before, handleCert result is SEC_ERROR_NO_MODULE (0x805A1FC0).
+      // Get PSM here ensure certService.getOrCreateCert works properly.
+      Cc["@mozilla.org/psm;1"].getService(Ci.nsISupports);
+
+#ifdef MOZ_WIDGET_GONK
+      // The remote-control service will be started on booting up. However,
+      // the Gonk platform can't get the correct time at that moment.
+      // If the time is incorrect, then neither is the period of the certificate.
+      // At the first time running of this service, we create a new certificate,
+      // then we validate it when receiving time-changed event
+      // (The time should be correct). If the period is invalid, we will remove
+      // the outdated certificate and create a new one, then restart the service.
+      // At the following runnings, we directly use the previous valid certificate.
+      // The validation will still be checked on time-changed callback.
+
+      // Try toget certificate from x509cert DB first.
+      // If the certificate doesn't exist, then create one.
+      try {
+        let certDB = Cc["@mozilla.org/security/x509certdb;1"]
+                     .getService(Ci.nsIX509CertDB);
+        let cert = certDB.findCertByNickname(SERVICE_CERT);
+        DEBUG && debug("Get the existing certificate");
+        aResolve(cert);
+        return;
+      } catch(e) {
+        // Find nothing, fall through to create a new certificate
+      }
+#endif
+      certService.getOrCreateCert(SERVICE_CERT, {
+        handleCert: function(cert, result) {
+          if(result) {
+            aReject("getOrCreateCert " + result);
+          } else {
+            DEBUG && debug("Create a new certificate");
+            aResolve(cert);
+          }
+        }
+      });
+    });
+  },
+
+  // Try to get random port
+  _createSocket: function(aCertificate) {
+    try {
+      let ios = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
+      let socket;
+      for (let i = 100; i; i--) {
+        let temp = Cc["@mozilla.org/network/tls-server-socket;1"].createInstance(Ci.nsITLSServerSocket);
+        temp.init(this._port, false, MAX_CLIENT_CONNECTIONS);
+        temp.serverCert = aCertificate;
+
+        let allowed = ios.allowPort(temp.port, "tls");
+        if (!allowed) {
+          DEBUG && debug("Warning: obtained TLSServerSocket listens on a blocked port: " + temp.port);
+        }
+
+        if (!allowed && this._port == -1) {
+          DEBUG && debug("Throw away TLSServerSocket with bad port.");
+          temp.close();
+          continue;
+        }
+
+        socket = temp;
+        break;
+      }
+
+      if (!socket) {
+        throw new Error("No socket server available. Are there no available ports?");
+      }
+
+      DEBUG && debug("Listen on port " + socket.port + ", " + MAX_CLIENT_CONNECTIONS + " pending connections");
+
+      socket.serverCert = aCertificate;
+      // Set session cache and tickets to false here.
+      // Cache disconnects fennect addon when addon sends message
+      // Tickets crashes b2g when fennec addon connects
+      socket.setSessionCache(false);
+      socket.setSessionTickets(false);
+      socket.setRequestClientCertificate(Ci.nsITLSServerSocket.REQUEST_NEVER);
+
+      socket.asyncListen(this);
+      this._port = socket.port;
+      this._serverSocket = socket;
+    } catch (e) {
+      DEBUG && debug("Could not start server on port " + this._port + ": " + e);
+      return false;
+    }
+
+    return true;
+  },
+
+  // Register mDNS remote control service with this._port
+  _registerService: function(aListener) {
+    if (("@mozilla.org/toolkit/components/mdnsresponder/dns-sd;1" in Cc)) {
+      let serviceInfo = Cc["@mozilla.org/toolkit/components/mdnsresponder/dns-info;1"]
+                          .createInstance(Ci.nsIDNSServiceInfo);
+      serviceInfo.serviceType = REMOTECONTROL_PREF_MDNS_SERVICE_TYPE;
+      serviceInfo.serviceName = Services.prefs.getCharPref(REMOTECONTROL_PREF_MDNS_SERVICE_NAME);
+      serviceInfo.port = this._port;
+
+      let mdns = Cc["@mozilla.org/toolkit/components/mdnsresponder/dns-sd;1"]
+                   .getService(Ci.nsIDNSServiceDiscovery);
+      this._mDNSRegistrationHandle = mdns.registerService(serviceInfo, aListener);
+    }
   },
 
   // Notifies this server that the given connection has been closed.

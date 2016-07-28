@@ -36,7 +36,7 @@ chrome.jar:
 
   content/identity.js                   (content/identity.js)
 #ifdef MOZ_B2G_REMOTECONTROLSERVICE
-  content/remote_control.js             (content/remote_control.js)
+* content/remote_control.js             (content/remote_control.js)
   content/remote_command.js             (content/remote_command.js)
 #endif
 
