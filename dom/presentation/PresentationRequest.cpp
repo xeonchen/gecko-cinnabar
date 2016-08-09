@@ -14,6 +14,7 @@
 #include "nsCycleCollectionParticipant.h"
 #include "nsIPresentationService.h"
 #include "nsIUUIDGenerator.h"
+#include "nsSandboxFlags.h"
 #include "nsServiceManagerUtils.h"
 #include "PresentationAvailability.h"
 #include "PresentationCallbacks.h"
@@ -104,9 +105,20 @@ PresentationRequest::StartWithDevice(const nsAString& aDeviceId,
     return nullptr;
   }
 
+  nsCOMPtr<nsIDocument> doc = GetOwner()->GetExtantDoc();
+  if (NS_WARN_IF(!doc)) {
+    aRv.Throw(NS_ERROR_FAILURE);
+    return nullptr;
+  }
+
   RefPtr<Promise> promise = Promise::Create(global, aRv);
   if (NS_WARN_IF(aRv.Failed())) {
     return nullptr;
+  }
+
+  if (doc->GetSandboxFlags() & SANDBOXED_PRESENTATION) {
+    promise->MaybeReject(NS_ERROR_DOM_SECURITY_ERR);
+    return promise.forget();
   }
 
   // Generate a session ID.
@@ -261,9 +273,20 @@ PresentationRequest::GetAvailability(ErrorResult& aRv)
     return nullptr;
   }
 
+  nsCOMPtr<nsIDocument> doc = GetOwner()->GetExtantDoc();
+  if (NS_WARN_IF(!doc)) {
+    aRv.Throw(NS_ERROR_FAILURE);
+    return nullptr;
+  }
+
   RefPtr<Promise> promise = Promise::Create(global, aRv);
   if (NS_WARN_IF(aRv.Failed())) {
     return nullptr;
+  }
+
+  if (doc->GetSandboxFlags() & SANDBOXED_PRESENTATION) {
+    promise->MaybeReject(NS_ERROR_DOM_SECURITY_ERR);
+    return promise.forget();
   }
 
   promise->MaybeResolve(mAvailability);

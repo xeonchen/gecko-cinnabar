@@ -81,4 +81,9 @@ const unsigned long SANDBOXED_AUXILIARY_NAVIGATION = 0x200;
  * This flag prevents locking screen orientation.
  */
 const unsigned long SANDBOXED_ORIENTATION_LOCK = 0x400;
+
+/**
+ * This flag disables the Presentation API.
+ */
+const unsigned long SANDBOXED_PRESENTATION = 0x800;
 #endif
