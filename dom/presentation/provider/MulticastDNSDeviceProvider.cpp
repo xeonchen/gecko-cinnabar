@@ -28,6 +28,7 @@
 
 #define SERVICE_TYPE "_presentation-ctrl._tcp"
 #define PROTOCOL_VERSION_TAG "version"
+#define CERT_FINGERPRINT_TAG "certFingerprint"
 
 static mozilla::LazyLogModule sMulticastDNSProviderLogModule("MulticastDNSDeviceProvider");
 
@@ -323,7 +324,8 @@ MulticastDNSDeviceProvider::Connect(Device* aDevice,
 
   RefPtr<TCPDeviceInfo> deviceInfo = new TCPDeviceInfo(aDevice->Id(),
                                                        aDevice->Address(),
-                                                       aDevice->Port());
+                                                       aDevice->Port(),
+                                                       aDevice->CertFingerprint());
 
   return mPresentationService->Connect(deviceInfo, aRetVal);
 }
@@ -359,7 +361,8 @@ MulticastDNSDeviceProvider::AddDevice(const nsACString& aId,
                                       const nsACString& aServiceName,
                                       const nsACString& aServiceType,
                                       const nsACString& aAddress,
-                                      const uint16_t aPort)
+                                      const uint16_t aPort,
+                                      const nsACString& aCertFingerprint)
 {
   MOZ_ASSERT(NS_IsMainThread());
   MOZ_ASSERT(mPresentationService);
@@ -369,6 +372,7 @@ MulticastDNSDeviceProvider::AddDevice(const nsACString& aId,
                                      aServiceType,
                                      aAddress,
                                      aPort,
+                                     aCertFingerprint,
                                      DeviceState::eActive,
                                      this);
 
@@ -387,7 +391,8 @@ MulticastDNSDeviceProvider::UpdateDevice(const uint32_t aIndex,
                                          const nsACString& aServiceName,
                                          const nsACString& aServiceType,
                                          const nsACString& aAddress,
-                                         const uint16_t aPort)
+                                         const uint16_t aPort,
+                                         const nsACString& aCertFingerprint)
 {
   MOZ_ASSERT(NS_IsMainThread());
   MOZ_ASSERT(mPresentationService);
@@ -397,7 +402,7 @@ MulticastDNSDeviceProvider::UpdateDevice(const uint32_t aIndex,
   }
 
   RefPtr<Device> device = mDevices[aIndex];
-  device->Update(aServiceName, aServiceType, aAddress, aPort);
+  device->Update(aServiceName, aServiceType, aAddress, aPort, aCertFingerprint);
   device->ChangeState(DeviceState::eActive);
 
   nsCOMPtr<nsIPresentationDeviceListener> listener;
@@ -442,6 +447,7 @@ MulticastDNSDeviceProvider::FindDeviceById(const nsACString& aId,
                                      /* aType = */ EmptyCString(),
                                      /* aHost = */ EmptyCString(),
                                      /* aPort = */ 0,
+                                     /* aCertFingerprint */ EmptyCString(),
                                      /* aState = */ DeviceState::eUnknown,
                                      /* aProvider = */ nullptr);
   size_t index = mDevices.IndexOf(device, 0, DeviceIdComparator());
@@ -465,6 +471,7 @@ MulticastDNSDeviceProvider::FindDeviceByAddress(const nsACString& aAddress,
                                      /* aType = */ EmptyCString(),
                                      aAddress,
                                      /* aPort = */ 0,
+                                     /* aCertFingerprint */ EmptyCString(),
                                      /* aState = */ DeviceState::eUnknown,
                                      /* aProvider = */ nullptr);
   size_t index = mDevices.IndexOf(device, 0, DeviceAddressComparator());
@@ -832,19 +839,31 @@ MulticastDNSDeviceProvider::OnServiceResolved(nsIDNSServiceInfo* aServiceInfo)
     return rv;
   }
 
+  nsCOMPtr<nsIPropertyBag2> propBag;
+  if (NS_WARN_IF(NS_FAILED(
+          aServiceInfo->GetAttributes(getter_AddRefs(propBag)))) || !propBag) {
+    return rv;
+  }
+
+  nsAutoCString certFingerprint;
+  Unused << propBag->GetPropertyAsACString(NS_LITERAL_STRING(CERT_FINGERPRINT_TAG),
+                                           certFingerprint);
+
   uint32_t index;
   if (FindDeviceById(host, index)) {
     return UpdateDevice(index,
                         serviceName,
                         serviceType,
                         address,
-                        port);
+                        port,
+                        certFingerprint);
   } else {
     return AddDevice(host,
                      serviceName,
                      serviceType,
                      address,
-                     port);
+                     port,
+                     certFingerprint);
   }
 
   return NS_OK;
@@ -899,6 +918,7 @@ MulticastDNSDeviceProvider::GetOrCreateDevice(nsITCPDeviceInfo* aDeviceInfo)
                         /* aType = */ EmptyCString(),
                         address,
                         port,
+                        /* aCertFingerprint */ EmptyCString(),
                         DeviceState::eActive,
                         /* aProvider = */ nullptr);
   }
