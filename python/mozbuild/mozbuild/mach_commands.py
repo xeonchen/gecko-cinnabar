@@ -547,6 +547,27 @@ class Build(MachCommandBase):
 
         return status
 
+    def set_display_name(self, name):
+        CONFIGURE_SH = os.path.join(self.topsrcdir,
+            'browser', 'branding', 'unofficial', 'configure.sh')
+
+        with open(CONFIGURE_SH, 'w') as f:
+            f.write('MOZ_APP_DISPLAYNAME=%s\n' % name)
+
+    def unset_display_name(self):
+        CONFIGURE_SH = os.path.join(self.topsrcdir,
+            'browser', 'branding', 'unofficial', 'configure.sh')
+        subprocess.call(['git', 'checkout', CONFIGURE_SH])
+
+    def get_git_revision(self, n):
+        rev = subprocess.check_output(['git', 'rev-parse', 'HEAD~%d' % n])
+        return rev.strip()
+
+    def get_hg_revision(self, n):
+        git_rev = self.get_git_revision(n)
+        hg_rev = subprocess.check_output(['git', 'cinnabar', 'git2hg', git_rev])
+        return hg_rev.strip()
+
     @Command('configure', category='build',
         description='Configure the tree (run configure and config.status).')
     @CommandArgument('options', default=None, nargs=argparse.REMAINDER,
@@ -560,6 +581,7 @@ class Build(MachCommandBase):
         options = ' '.join(shell_quote(o) for o in options or ())
         append_env = {b'CONFIGURE_ARGS': options.encode('utf-8')}
 
+        self.set_display_name('Nightly-%s' % self.get_git_revision(1))
         # Only print build status messages when we have an active
         # monitor.
         if not buildstatus_messages:
@@ -573,6 +595,7 @@ class Build(MachCommandBase):
             print('Configure complete!')
             print('Be sure to run |mach build| to pick up any changes');
 
+        self.unset_display_name()
         return status
 
     @Command('resource-usage', category='post-build',
