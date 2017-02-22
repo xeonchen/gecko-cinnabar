@@ -19,9 +19,12 @@
 #include "mozilla/net/DNS.h"
 #include "nsServiceManagerUtils.h"
 #include "nsNetCID.h"
+#include "mozilla/Logging.h"
 
 namespace mozilla {
 namespace net {
+
+LazyLogModule gPACLog("ProxyAutoConfig");
 
 // These are some global helper symbols the PAC format requires that we provide that
 // are initialized as part of the global javascript context used for PAC evaluations.
@@ -820,6 +823,8 @@ ProxyAutoConfig::GetProxyForURI(const nsCString &aTestURI,
       nsAutoJSString pacString;
       if (pacString.init(cx, rval.toString())) {
         CopyUTF16toUTF8(pacString, result);
+
+        MOZ_LOG(gPACLog, LogLevel::Debug, ("FindProxyForURL(%s, %s) = %s\n", clensedURI.get(), aTestHost.get(), PromiseFlatCString(result).get()));
         rv = NS_OK;
       }
     }
