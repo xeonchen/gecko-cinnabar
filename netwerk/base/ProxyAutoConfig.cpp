@@ -866,6 +866,9 @@ ProxyAutoConfig::Shutdown()
 bool
 ProxyAutoConfig::SrcAddress(const NetAddr *remoteAddress, nsCString &localAddress)
 {
+  MOZ_ASSERT(XRE_IsParentProcess());
+  printf_stderr("[xeon] pid=%d\n", getpid());
+
   PRFileDesc *fd;
   fd = PR_OpenUDPSocket(remoteAddress->raw.family);
   if (!fd)
@@ -873,7 +876,11 @@ ProxyAutoConfig::SrcAddress(const NetAddr *remoteAddress, nsCString &localAddres
 
   PRNetAddr prRemoteAddress;
   NetAddrToPRNetAddr(remoteAddress, &prRemoteAddress);
-  if (PR_Connect(fd, &prRemoteAddress, 0) != PR_SUCCESS) {
+  PRStatus status = PR_SUCCESS;
+  if ((status = PR_Connect(fd, &prRemoteAddress, 0)) != PR_SUCCESS) {
+    PRErrorCode err = PR_GetError();
+    PRInt32 oserr = PR_GetOSError();
+    printf_stderr("[xeon] err=%d, oserr=%d (%08x)\n", err, oserr, oserr);
     PR_Close(fd);
     return false;
   }
