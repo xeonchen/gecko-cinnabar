@@ -72,6 +72,7 @@ Http2Stream::Http2Stream(nsAHttpTransaction *httpTransaction,
   , mTotalRead(0)
   , mPushSource(nullptr)
   , mAttempting0RTT(false)
+  , mThrottleResponse(false)
   , mIsTunnel(false)
   , mPlainTextTunnel(false)
 {
@@ -1550,6 +1551,19 @@ Http2Stream::Finish0RTT(bool aRestart, bool aAlpnChanged)
     }
   }
   return rv;
+}
+
+void
+Http2Stream::ThrottleResponse(bool aThrottle)
+{
+  MOZ_ASSERT(OnSocketThread(), "not on socket thread");
+
+  // Just in case we suspend, get a connection, release a connection, get another connection.
+  mThrottleResponse = aThrottle;
+
+  if (mSession) {
+      mSession->ThrottleResponse(aThrottle);
+  }
 }
 
 } // namespace net

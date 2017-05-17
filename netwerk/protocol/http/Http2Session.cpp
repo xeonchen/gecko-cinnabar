@@ -4251,7 +4251,10 @@ Http2Session::RealJoinConnection(const nsACString &hostname, int32_t port,
 void
 Http2Session::ThrottleResponse(bool aThrottle)
 {
-  // Response throttling on an h2 connection will be implemented later.
+  // MOZ_ASSERT(OnSocketThread(), "not on socket thread");
+  if (mConnection) {
+    mConnection->ThrottleResponse(aThrottle);
+  }
 }
 
 } // namespace net

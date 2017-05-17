@@ -168,6 +168,10 @@ public:
   bool Do0RTT();
   nsresult Finish0RTT(bool aRestart, bool aAlpnIgnored);
 
+  // Forwards to the session's ThrottleResponse.  If there is no session
+  // at the time, we set a flag to do it on session assignment.
+  void ThrottleResponse(bool aThrottle);
+
 protected:
   static void CreatePushHashKey(const nsCString &scheme,
                                 const nsCString &hostHeader,
@@ -344,6 +348,9 @@ private:
   SimpleBuffer mSimpleBuffer;
 
   bool mAttempting0RTT;
+
+  // If true, this stream was asked to stop receiving the response.
+  bool mThrottleResponse;
 
 /// connect tunnels
 public:
