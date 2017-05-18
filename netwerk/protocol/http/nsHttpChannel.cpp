@@ -6878,6 +6878,13 @@ nsHttpChannel::OnStartRequest(nsIRequest *request, nsISupports *ctxt)
     LOG(("nsHttpChannel::OnStartRequest [this=%p request=%p status=%" PRIx32 "]\n",
          this, request, static_cast<uint32_t>(mStatus)));
 
+    // clear urgent-start after request is sent
+    if (mClassOfService & nsIClassOfService::UrgentStart) {
+        mCaps &= ~NS_HTTP_URGENT_START;
+        ClearClassFlags(nsIClassOfService::UrgentStart);
+        SetPriority(nsISupportsPriority::PRIORITY_NORMAL);
+    }
+
     if (mRaceCacheWithNetwork) {
         LOG(("  racingNetAndCache - mFirstResponseSource:%d fromCache:%d fromNet:%d\n",
              mFirstResponseSource, request == mCachePump, request == mTransactionPump));
