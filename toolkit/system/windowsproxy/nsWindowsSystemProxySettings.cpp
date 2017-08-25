@@ -29,12 +29,19 @@ public:
 
     nsWindowsSystemProxySettings() {};
     nsresult Init();
+    nsresult Close();
 
 private:
-    ~nsWindowsSystemProxySettings() {};
+    ~nsWindowsSystemProxySettings() { Close(); };
 
     bool MatchOverride(const nsACString& aHost);
     bool PatternMatch(const nsACString& aHost, const nsACString& aOverride);
+
+    nsresult RegisterNotifyEvent();
+    void UnregisterNotifyEvent();
+
+    HKEY mRegHandle;
+    HANDLE mRegNotifyEvent;
 };
 
 NS_IMPL_ISUPPORTS(nsWindowsSystemProxySettings, nsISystemProxySettings)
@@ -53,7 +60,68 @@ nsWindowsSystemProxySettings::GetMainThreadOnly(bool *aMainThreadOnly)
 nsresult
 nsWindowsSystemProxySettings::Init()
 {
+    nsresult rv;
+
+    if (NS_WARN_IF(NS_FAILED(rv = RegisterNotifyEvent()))) {
+        return rv;
+    }
+
     return NS_OK;
+}
+
+nsresult
+nsWindowsSystemProxySettings::Close()
+{
+    UnregisterNotifyEvent();
+    return NS_OK;
+}
+
+nsresult
+nsWindowsSystemProxySettings::RegisterNotifyEvent()
+{
+    ::ZeroMemory(mRegHandle);
+    if (ERROR_SUCCESS !=
+        ::RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                       "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
+                       0,
+                       KEY_NOTIFY,
+                       &mRegHandle)) {
+        return NS_ERROR_FAILURE;
+    }
+
+    mRegNotifyEvent = ::CreateEventA(nullptr,
+                                     FALSE,
+                                     FALSE,
+                                     "nsWindowsSystemProxySettings::mRegNotifyEvent");
+    if (!mRegNotifyEvent) {
+        UnregisterNotifyEvent();
+        return NS_ERROR_OUT_OF_MEMORY;
+    }
+
+    ::RegNotifyChangeKeyValue(mRegHandle,
+                              TRUE,
+                              REG_NOTIFY_CHANGE_NAME |
+                              REG_NOTIFY_CHANGE_ATTRIBUTES |
+                              REG_NOTIFY_CHANGE_LAST_SET |
+                              REG_NOTIFY_CHANGE_SECURITY,
+                              mRegNotifyEvent,
+                              TRUE);
+
+    return NS_OK;
+}
+
+void
+nsWindowsSystemProxySettings::UnregisterNotifyEvent()
+{
+    if (mRegNotifyEvent) {
+        ::CloseHandle(mRegNotifyEvent);
+        mRegNotifyEvent = nullptr;
+    }
+
+    if (mRegHandle) {
+        ::RegCloseKey(mRegHandle);
+        mRegHandle = nullptr
+    }
 }
 
 static void SetProxyResult(const char* aType, const nsACString& aHostPort,
