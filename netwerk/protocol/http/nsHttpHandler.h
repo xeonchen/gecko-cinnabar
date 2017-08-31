@@ -136,7 +136,7 @@ public:
 
     bool           PromptTempRedirect()      { return mPromptTempRedirect; }
     bool           IsUrgentStartEnabled() { return mUrgentStartEnabled; }
-    bool           IsTailBlockingEnabled() { return mTailBlockingEnabled; }
+    bool           IsTailBlockingEnabled() { return false; }
     uint32_t       TailBlockingDelayQuantum(bool aAfterDOMContentLoaded) {
       return aAfterDOMContentLoaded ? mTailDelayQuantumAfterDCL : mTailDelayQuantum;
     }

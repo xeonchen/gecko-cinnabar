@@ -3083,7 +3083,7 @@ public:
   static bool IsLowerNetworkPriority() { return sLowerNetworkPriority; }
 
   // Whether tracker tailing is turned on - "network.http.tailing.enabled".
-  static bool IsTailingEnabled() { return sTailingEnabled; }
+  static bool IsTailingEnabled() { return false; }
 
   // Check pref "dom.placeholder.show_on_focus" to see
   // if we want to show the placeholder inside input elements
