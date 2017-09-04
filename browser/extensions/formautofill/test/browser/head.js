@@ -113,26 +113,46 @@ async function expectPopupOpen(browser) {
 }
 
 async function openPopupOn(browser, selector) {
+  dump("[xeon] before promiseFocus\n");
   await SimpleTest.promiseFocus(browser);
+  dump("[xeon] after promiseFocus\n");
   /* eslint no-shadow: ["error", { "allow": ["selector"] }] */
   const identified = await ContentTask.spawn(browser, {selector}, async function({selector}) {
+
+    let consoleService = Cc["@mozilla.org/consoleservice;1"].getService(Ci.nsIConsoleService);
+
+    consoleService.logStringMessage("[xeon] async function({selector}) 1\n");
     const input = content.document.querySelector(selector);
+    consoleService.logStringMessage("[xeon] async function({selector}) 2\n");
     const forms = content.document.getElementsByTagName("form");
+    consoleService.logStringMessage("[xeon] async function({selector}) 3\n");
     const rootElement = [...forms].find(form => form.contains(input)) || content.document.body;
+    consoleService.logStringMessage("[xeon] async function({selector}) 4\n");
 
     input.focus();
+    consoleService.logStringMessage("[xeon] async function({selector}) 5\n");
     if (rootElement.hasAttribute("test-formautofill-identified")) {
+      consoleService.logStringMessage("[xeon] async function({selector}) 6.1\n");
       return true;
     }
+
+    consoleService.logStringMessage("[xeon] async function({selector}) 6\n");
     rootElement.setAttribute("test-formautofill-identified", "true");
+    consoleService.logStringMessage("[xeon] async function({selector}) 7\n");
     return false;
   });
   // Wait 2 seconds for identifyAutofillFields if the form hasn't been identified yet.
   if (!identified) {
+    dump("[xeon] before sleep(2000)\n");
     await sleep(2000);
+    dump("[xeon] after sleep(2000)\n");
   }
+  dump("[xeon] before BrowserTestUtils.synthesizeKey\n");
   await BrowserTestUtils.synthesizeKey("VK_DOWN", {}, browser);
+  dump("[xeon] after BrowserTestUtils.synthesizeKey\n");
+  dump("[xeon] before expectPopupOpen\n");
   await expectPopupOpen(browser);
+  dump("[xeon] after expectPopupOpen\n");
 }
 
 async function expectPopupClose(browser) {

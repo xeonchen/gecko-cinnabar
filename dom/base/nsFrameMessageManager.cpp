@@ -362,6 +362,8 @@ nsFrameMessageManager::LoadScript(const nsAString& aURL,
                                   bool aAllowDelayedLoad,
                                   bool aRunInGlobalScope)
 {
+  printf_stderr("[xeon] nsFrameMessageManager::LoadScript %s\n",
+                NS_ConvertUTF16toUTF8(aURL).get());
   if (aAllowDelayedLoad) {
     // Cache for future windows or frames
     mPendingScripts.AppendElement(aURL);

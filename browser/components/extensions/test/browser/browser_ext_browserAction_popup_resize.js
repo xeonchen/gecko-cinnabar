@@ -22,12 +22,20 @@ add_task(async function testBrowserActionPopupResize() {
     },
   });
 
+  dump("[xeon] before extension.startup\n");
   await extension.startup();
+  dump("[xeon] after extension.startup\n");
 
+  dump("[xeon] before openPanel\n");
   let browser = await openPanel(extension, undefined, true);
+  dump("[xeon] after openPanel\n");
 
   async function checkSize(expected) {
+    dump("[xeon] checkSize(" + expected + ")\n");
+
+    dump("[xeon] before promiseContentDimensions\n");
     let dims = await promiseContentDimensions(browser);
+    dump("[xeon] after promiseContentDimensions\n");
 
     Assert.lessOrEqual(Math.abs(dims.window.innerHeight - expected), 1,
                        `Panel window should be ${expected}px tall (was ${dims.window.innerHeight})`);
@@ -43,10 +51,24 @@ add_task(async function testBrowserActionPopupResize() {
 
   /* eslint-disable mozilla/no-cpows-in-tests */
   function setSize(size) {
+    dump("[xeon] sizeSize(" + size + ")\n");
+
+    dump("[xeon] before content.document.body.style\n");
+
+    let obj = content.document;
+    for (let k in obj) {
+      if (obj.hasOwnProperty(k)) {
+        dump("[xeon] k = " + k + "\n");
+        dump("[xeon] v = " + obj[k] + "\n");
+      }
+    }
+
     content.document.body.style.height = `${size}px`;
     content.document.body.style.width = `${size}px`;
+    dump("[xeon] after content.document.body.style\n");
   }
   /* eslint-enable mozilla/no-cpows-in-tests */
+
 
   let sizes = [
     200,
@@ -55,8 +77,16 @@ add_task(async function testBrowserActionPopupResize() {
   ];
 
   for (let size of sizes) {
+    dump("[xeon] size = " + size + "\n");
+
+    dump("[xeon] before alterContent\n");
     await alterContent(browser, setSize, size);
+    dump("[xeon] after alterContent\n");
+
+
+    dump("[xeon] before checkSize\n");
     await checkSize(size);
+    dump("[xeon] after checkSize\n");
   }
 
   await closeBrowserAction(extension);

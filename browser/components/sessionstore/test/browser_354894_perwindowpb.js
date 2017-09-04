@@ -50,6 +50,12 @@ const CHROME_FEATURES = "chrome,all,dialog=no";
 
 const IS_MAC = navigator.platform.match(/Mac/);
 
+var testCount = 0;
+
+function log(msg) {
+  dump("[xeon][" + testCount + "] " + msg + "\n");
+}
+
 /**
  * Returns an Object with two properties:
  *   open (int):
@@ -111,6 +117,8 @@ add_task(async function setup() {
  *        Resolves once the test has been cleaned up.
  */
 let setupTest = async function(options, testFunction) {
+  log("setupTest: " + testFunction.name);
+
   await pushPrefs(["browser.startup.page", 3],
                   ["browser.tabs.warnOnClose", false]);
 
@@ -125,6 +133,7 @@ let setupTest = async function(options, testFunction) {
    */
   let hitCount = 0;
   function observer(aCancel, aTopic, aData) {
+    log("observer: topic=" + aTopic);
     // count so that we later may compare
     observing[aTopic]++;
 
@@ -143,7 +152,9 @@ let setupTest = async function(options, testFunction) {
 
   injectTestTabs(newWin);
 
+  log("=========== BEGIN testFunction ===========");
   await testFunction(newWin, observing);
+  log("===========  END  testFunction ===========");
 
   let count = getBrowserWindowsCount();
   is(count.open, 0, "Got right number of open windows");
@@ -211,14 +222,21 @@ add_task(async function test_open_close_normal() {
     return;
   }
 
+  ++testCount;
+
   await setupTest({ denyFirst: true }, async function(newWin, obs) {
+    log("length = " + newWin.gBrowser.browsers.length);
+
     let closed = await closeWindowForRestoration(newWin);
     ok(!closed, "First close request should have been denied");
 
     closed = await closeWindowForRestoration(newWin);
     ok(closed, "Second close request should be accepted");
 
+    log("promiseNewWindowLoaded begin (" + (TEST_URLS.length + 2) + ")");
     newWin = await promiseNewWindowLoaded();
+    log("promiseNewWindowLoaded end (" + newWin.gBrowser.browsers.length + ")");
+
     is(newWin.gBrowser.browsers.length, TEST_URLS.length + 2,
        "Restored window in-session with otherpopup windows around");
 
@@ -255,6 +273,8 @@ add_task(async function test_open_close_private_browsing() {
     return;
   }
 
+  ++testCount;
+
   await setupTest({}, async function(newWin, obs) {
     let closed = await closeWindowForRestoration(newWin);
     ok(closed, "Should be able to close the window");
@@ -266,7 +286,10 @@ add_task(async function test_open_close_private_browsing() {
     closed = await closeWindowForRestoration(newWin);
     ok(closed, "Should be able to close the window");
 
+    log("promiseNewWindowLoaded begin (" + (TEST_URLS.length + 2) + ")");
     newWin = await promiseNewWindowLoaded();
+    log("promiseNewWindowLoaded end (" + newWin.gBrowser.browsers.length + ")");
+
     is(newWin.gBrowser.browsers.length, TEST_URLS.length + 2,
        "Restored tabs in a new non-private window");
 
@@ -303,6 +326,8 @@ add_task(async function test_open_close_window_and_popup() {
   if (IS_MAC) {
     return;
   }
+
+  ++testCount;
 
   await setupTest({}, async function(newWin, obs) {
     let popupPromise = BrowserTestUtils.waitForNewWindow();

@@ -355,26 +355,26 @@ static void
 DEBUG_CheckUnwrapSafety(HandleObject obj, const js::Wrapper* handler,
                         JSCompartment* origin, JSCompartment* target)
 {
-    if (!JS_IsScriptSourceObject(obj) &&
-        (CompartmentPrivate::Get(origin)->wasNuked || CompartmentPrivate::Get(target)->wasNuked)) {
-        // If either compartment has already been nuked, we should have returned
-        // a dead wrapper from our prewrap callback, and this function should
-        // not be called.
-        MOZ_ASSERT_UNREACHABLE("CheckUnwrapSafety called for a dead wrapper");
-    } else if (AccessCheck::isChrome(target) || xpc::IsUniversalXPConnectEnabled(target)) {
-        // If the caller is chrome (or effectively so), unwrap should always be allowed.
-        MOZ_ASSERT(!handler->hasSecurityPolicy());
-    } else if (CompartmentPrivate::Get(origin)->forcePermissiveCOWs) {
-        // Similarly, if this is a privileged scope that has opted to make itself
-        // accessible to the world (allowed only during automation), unwrap should
-        // be allowed.
-        MOZ_ASSERT(!handler->hasSecurityPolicy());
-    } else {
-        // Otherwise, it should depend on whether the target subsumes the origin.
-        MOZ_ASSERT(handler->hasSecurityPolicy() == !(OriginAttributes::IsRestrictOpenerAccessForFPI() ?
-                                                       AccessCheck::subsumesConsideringDomain(target, origin) :
-                                                       AccessCheck::subsumesConsideringDomainIgnoringFPD(target, origin)));
-    }
+    // if (!JS_IsScriptSourceObject(obj) &&
+    //     (CompartmentPrivate::Get(origin)->wasNuked || CompartmentPrivate::Get(target)->wasNuked)) {
+    //     // If either compartment has already been nuked, we should have returned
+    //     // a dead wrapper from our prewrap callback, and this function should
+    //     // not be called.
+    //     MOZ_ASSERT_UNREACHABLE("CheckUnwrapSafety called for a dead wrapper");
+    // } else if (AccessCheck::isChrome(target) || xpc::IsUniversalXPConnectEnabled(target)) {
+    //     // If the caller is chrome (or effectively so), unwrap should always be allowed.
+    //     MOZ_ASSERT(!handler->hasSecurityPolicy());
+    // } else if (CompartmentPrivate::Get(origin)->forcePermissiveCOWs) {
+    //     // Similarly, if this is a privileged scope that has opted to make itself
+    //     // accessible to the world (allowed only during automation), unwrap should
+    //     // be allowed.
+    //     MOZ_ASSERT(!handler->hasSecurityPolicy());
+    // } else {
+    //     // Otherwise, it should depend on whether the target subsumes the origin.
+    //     MOZ_ASSERT(handler->hasSecurityPolicy() == !(OriginAttributes::IsRestrictOpenerAccessForFPI() ?
+    //                                                    AccessCheck::subsumesConsideringDomain(target, origin) :
+    //                                                    AccessCheck::subsumesConsideringDomainIgnoringFPD(target, origin)));
+    // }
 }
 #else
 #define DEBUG_CheckUnwrapSafety(obj, handler, origin, target) {}

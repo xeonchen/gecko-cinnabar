@@ -2511,6 +2511,8 @@
           <![CDATA[
             "use strict";
 
+            dump("[xeon] addTab: " + aURI + "\n");
+
             const NS_XUL = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
             var aTriggeringPrincipal;
             var aReferrerPolicy;
@@ -2824,6 +2826,7 @@
               });
             }
 
+            dump("[xeon] addTab end\n");
             return t;
           ]]>
         </body>

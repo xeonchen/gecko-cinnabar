@@ -194,12 +194,18 @@ function getPanelForNode(node) {
 }
 
 var awaitBrowserLoaded = browser => ContentTask.spawn(browser, null, () => {
+  dump("[xeon] awaitBrowserLoaded (" + content.document.documentURI + ")\n");
+
   if (content.document.readyState !== "complete" ||
       content.document.documentURI === "about:blank") {
+    dump("[xeon] awaitBrowserLoaded (wait)\n");
     return ContentTaskUtils.waitForEvent(this, "load", true, event => {
+      dump("[xeon] event: " + event + "\n");
       return content.document.documentURI !== "about:blank";
     }).then(() => {});
   }
+
+  dump("[xeon] awaitBrowserLoaded (complete)\n");
 });
 
 var awaitExtensionPanel = async function(extension, win = window, awaitLoad = true) {

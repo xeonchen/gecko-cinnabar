@@ -457,6 +457,7 @@ nsJARChannel::OpenLocalFile()
     // Set mLoadGroup and mOpened before AsyncOpen return, and set back if
     // if failed when callback.
     if (mLoadGroup) {
+        LOG(("Add %p to load group %p\n", this, mLoadGroup.get()));
         mLoadGroup->AddRequest(this, nullptr);
     }
     mOpened = true;
@@ -556,6 +557,7 @@ nsJARChannel::ContinueOpenLocalFile(nsJARInputThunk* aInput)
     nsresult rv;
     // Create input stream pump and call AsyncRead as a block.
     rv = NS_NewInputStreamPump(getter_AddRefs(mPump), aInput);
+    LOG(("NewInputStreamPump: pump=%p\n", mPump.get()));
     if (NS_SUCCEEDED(rv)) {
         rv = mPump->AsyncRead(this, nullptr);
     }
@@ -583,6 +585,7 @@ nsJARChannel::OnOpenLocalFileComplete(nsresult aResult)
         }
 
         if (mLoadGroup) {
+            LOG(("Remove %p from load group %p\n", this, mLoadGroup.get()));
             mLoadGroup->RemoveRequest(this, nullptr, aResult);
         }
 
@@ -651,12 +654,14 @@ nsJARChannel::FireOnProgress(uint64_t aProgress)
 NS_IMETHODIMP
 nsJARChannel::GetName(nsACString &result)
 {
+    LOG(("nsJARChannel::GetName [this=%p]\n", this));
     return mJarURI->GetSpec(result);
 }
 
 NS_IMETHODIMP
 nsJARChannel::IsPending(bool *result)
 {
+    LOG(("nsJARChannel::IsPending [this=%p]\n", this));
     *result = mIsPending;
     return NS_OK;
 }
@@ -664,6 +669,7 @@ nsJARChannel::IsPending(bool *result)
 NS_IMETHODIMP
 nsJARChannel::GetStatus(nsresult *status)
 {
+    LOG(("nsJARChannel::GetStatus [this=%p]\n", this));
     if (mPump && NS_SUCCEEDED(mStatus))
         mPump->GetStatus(status);
     else
@@ -674,6 +680,9 @@ nsJARChannel::GetStatus(nsresult *status)
 NS_IMETHODIMP
 nsJARChannel::Cancel(nsresult status)
 {
+    LOG(("nsJARChannel::Cancel [this=%p] %08x\n",
+          this,
+          static_cast<uint32_t>(status)));
     mStatus = status;
     if (mPump) {
         return mPump->Cancel(status);
@@ -689,6 +698,8 @@ nsJARChannel::Cancel(nsresult status)
 NS_IMETHODIMP
 nsJARChannel::Suspend()
 {
+    LOG(("nsJARChannel::Suspend [this=%p]\n", this));
+
     ++mPendingEvent.suspendCount;
 
     if (mPump) {
@@ -701,6 +712,8 @@ nsJARChannel::Suspend()
 NS_IMETHODIMP
 nsJARChannel::Resume()
 {
+    LOG(("nsJARChannel::Resume [this=%p]\n", this));
+
     if (NS_WARN_IF(mPendingEvent.suspendCount == 0)) {
         return NS_ERROR_UNEXPECTED;
     }
@@ -716,6 +729,7 @@ nsJARChannel::Resume()
 NS_IMETHODIMP
 nsJARChannel::GetLoadFlags(nsLoadFlags *aLoadFlags)
 {
+    LOG(("nsJARChannel::GetLoadFlags [this=%p]\n", this));
     *aLoadFlags = mLoadFlags;
     return NS_OK;
 }
@@ -723,6 +737,7 @@ nsJARChannel::GetLoadFlags(nsLoadFlags *aLoadFlags)
 NS_IMETHODIMP
 nsJARChannel::SetLoadFlags(nsLoadFlags aLoadFlags)
 {
+    LOG(("nsJARChannel::SetLoadFlags [this=%p]\n", this));
     mLoadFlags = aLoadFlags;
     return NS_OK;
 }
@@ -730,12 +745,14 @@ nsJARChannel::SetLoadFlags(nsLoadFlags aLoadFlags)
 NS_IMETHODIMP
 nsJARChannel::GetIsDocument(bool *aIsDocument)
 {
+    LOG(("nsJARChannel::GetIsDocument [this=%p]\n", this));
     return NS_GetIsDocumentChannel(this, aIsDocument);
 }
 
 NS_IMETHODIMP
 nsJARChannel::GetLoadGroup(nsILoadGroup **aLoadGroup)
 {
+    LOG(("nsJARChannel::GetLoadGroup [this=%p]\n", this));
     NS_IF_ADDREF(*aLoadGroup = mLoadGroup);
     return NS_OK;
 }
@@ -743,6 +760,7 @@ nsJARChannel::GetLoadGroup(nsILoadGroup **aLoadGroup)
 NS_IMETHODIMP
 nsJARChannel::SetLoadGroup(nsILoadGroup *aLoadGroup)
 {
+    LOG(("nsJARChannel::SetLoadGroup [this=%p] %p\n", this, aLoadGroup));
     mLoadGroup = aLoadGroup;
     return NS_OK;
 }
@@ -1090,8 +1108,10 @@ nsJARChannel::AsyncOpen(nsIStreamListener *listener, nsISupports *ctx)
         return rv;
     }
 
-    if (mLoadGroup)
+    if (mLoadGroup) {
+        LOG(("Add %p to load group %p\n", this, mLoadGroup.get()));
         mLoadGroup->AddRequest(this, nullptr);
+    }
 
     mOpened = true;
     LOG(("nsJARChannel::AsyncOpen [this=%p] 8\n", this));
@@ -1353,8 +1373,10 @@ nsJARChannel::OnStopRequest(nsIRequest *req, nsISupports *ctx, nsresult status)
         mListenerContext = nullptr;
     }
 
-    if (mLoadGroup)
+    if (mLoadGroup) {
+        LOG(("Remove %p from load group %p\n", this, mLoadGroup.get()));
         mLoadGroup->RemoveRequest(this, nullptr, status);
+    }
 
     mPump = nullptr;
     mIsPending = false;

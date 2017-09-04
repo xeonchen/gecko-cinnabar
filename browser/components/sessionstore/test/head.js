@@ -425,6 +425,7 @@ function forgetClosedWindows() {
  * expected (e.g. reading a big session state from disk).
  */
 function whenNewWindowLoaded(aOptions, aCallback) {
+  dump("[xeon] whenNewWindowLoaded\n");
   let features = "";
   let url = "about:blank";
 
@@ -438,11 +439,13 @@ function whenNewWindowLoaded(aOptions, aCallback) {
 
   let browserLoaded = new Promise(resolve => {
     if (url == "about:blank") {
+      dump("[xeon] browserLoaded (about:blank)\n");
       resolve();
       return;
     }
 
     win.addEventListener("load", function() {
+      dump("[xeon] load event\n");
       let browser = win.gBrowser.selectedBrowser;
       promiseBrowserLoaded(browser).then(resolve);
     }, {once: true});

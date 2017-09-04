@@ -397,6 +397,7 @@ nsLoadGroup::GetLoadGroup(nsILoadGroup **loadGroup)
 NS_IMETHODIMP
 nsLoadGroup::SetLoadGroup(nsILoadGroup *loadGroup)
 {
+    LOG(("nsLoadGroup::SetLoadGroup this=%p loadGroup=%p", this, loadGroup));
     mLoadGroup = loadGroup;
     return NS_OK;
 }

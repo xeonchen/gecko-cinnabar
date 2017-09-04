@@ -65,7 +65,9 @@ this.ContentTask = {
   spawn: function ContentTask_spawn(browser, arg, task) {
     // Load the frame script if needed.
     if (!gFrameScriptLoaded) {
+      dump("[xeon] before Services.mm.loadFrameScript: " + FRAME_SCRIPT + "\n");
       Services.mm.loadFrameScript(FRAME_SCRIPT, true);
+      dump("[xeon] after Services.mm.loadFrameScript: " + FRAME_SCRIPT + "\n");
       gFrameScriptLoaded = true;
     }
 
@@ -78,6 +80,7 @@ this.ContentTask = {
     let id = gMessageID++;
     gPromises.set(id, deferred);
 
+    dump("[xeon] ContentTask sendAsyncMessage " + id + "\n");
     browser.messageManager.sendAsyncMessage(
       "content-task:spawn",
       {
@@ -99,6 +102,7 @@ var ContentMessageListener = {
   receiveMessage(aMessage) {
     let id = aMessage.data.id;
 
+    dump("[xeon] ContentTask receiveMessage " + id + "\n");
     if (id < ContentTask._scopeValidId) {
       throw new Error("test result returned after test finished");
     }

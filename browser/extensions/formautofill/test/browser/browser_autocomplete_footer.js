@@ -24,15 +24,28 @@ add_task(async function test_click_on_footer() {
   await BrowserTestUtils.withNewTab({gBrowser, url: URL}, async function(browser) {
     const {autoCompletePopup: {richlistbox: itemsBox}} = browser;
 
+    dump("[xeon] before openPopupOn\n");
     await openPopupOn(browser, "#organization");
+    dump("[xeon] after openPopupOn\n");
     // Click on the footer
+    dump("[xeon] before itemsBox.querySelector\n");
     const optionButton = itemsBox.querySelector(".autocomplete-richlistitem:last-child")._optionButton;
+    dump("[xeon] after itemsBox.querySelector\n");
+    dump("[xeon] before BrowserTestUtils.waitForNewTab\n");
     const prefTabPromise = BrowserTestUtils.waitForNewTab(gBrowser, PRIVACY_PREF_URL);
+    dump("[xeon] after BrowserTestUtils.waitForNewTab\n");
+    dump("[xeon] before EventUtils.synthesizeMouseAtCenter\n");
     await EventUtils.synthesizeMouseAtCenter(optionButton, {});
+    dump("[xeon] after EventUtils.synthesizeMouseAtCenter\n");
+    dump("[xeon] before BrowserTestUtils.removeTab\n");
     await BrowserTestUtils.removeTab(await prefTabPromise);
+    dump("[xeon] after BrowserTestUtils.removeTab\n");
+    dump("[xeon] before ok\n");
     ok(true, "Tab: preferences#privacy was successfully opened by clicking on the footer");
-
+    dump("[xeon] after ok\n");
+    dump("[xeon] before closePopup\n");
     await closePopup(browser);
+    dump("[xeon] after closePopup\n");
   });
 });
 

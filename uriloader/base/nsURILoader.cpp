@@ -865,7 +865,7 @@ nsresult nsURILoader::OpenChannel(nsIChannel* channel,
     channel->GetURI(getter_AddRefs(uri));
     nsAutoCString spec;
     uri->GetAsciiSpec(spec);
-    LOG(("nsURILoader::OpenChannel for %s", spec.get()));
+    LOG(("nsURILoader::OpenChannel %p for %s", channel, spec.get()));
   }
 
   // Let the window context's uriListener know that the open is starting.  This

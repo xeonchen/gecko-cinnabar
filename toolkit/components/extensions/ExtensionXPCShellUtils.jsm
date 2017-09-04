@@ -70,15 +70,18 @@ const FRAME_SCRIPT = `data:text/javascript,(${encodeURI(frameScript)}).call(this
 
 let kungFuDeathGrip = new Set();
 function promiseBrowserLoaded(browser, url, redirectUrl) {
+  dump("[xeon] before promiseBrowserLoaded: " + url + ", redirectUrl: " + redirectUrl + "\n");
   return new Promise(resolve => {
     const listener = {
       QueryInterface: XPCOMUtils.generateQI([Ci.nsISupportsWeakReference, Ci.nsIWebProgressListener]),
 
       onStateChange(webProgress, request, stateFlags, statusCode) {
         let requestUrl = request.URI ? request.URI.spec : webProgress.DOMWindow.location.href;
+        dump("[xeon] onStateChange: " + url + ", requestUrl: " + requestUrl + "\n");
         if (webProgress.isTopLevel &&
             (requestUrl === url || requestUrl === redirectUrl) &&
             (stateFlags & Ci.nsIWebProgressListener.STATE_STOP)) {
+          dump("[xeon] after promiseBrowserLoaded: " + url + ", redirectUrl: " + redirectUrl + "\n");
           resolve();
           kungFuDeathGrip.delete(listener);
           browser.removeProgressListener(listener);
@@ -149,7 +152,9 @@ class ContentPage {
   async loadURL(url, redirectUrl = undefined) {
     await this.browserReady;
 
+    dump("[xeon] before loadURL: " + url + ", redirectUrl: " + redirectUrl + "\n");
     this.browser.loadURI(url);
+    dump("[xeon] after loadURL: " + url + ", redirectUrl: " + redirectUrl + "\n");
     return promiseBrowserLoaded(this.browser, url, redirectUrl);
   }
 
@@ -717,7 +722,9 @@ var ExtensionTestUtils = {
   loadContentPage(url, {extension = undefined, remote = undefined, redirectUrl = undefined} = {}) {
     let contentPage = new ContentPage(remote, extension && extension.extension);
 
+    dump("[xeon] before loadContentPage: " + url + ", redirectUrl: " + redirectUrl + "\n");
     return contentPage.loadURL(url, redirectUrl).then(() => {
+      dump("[xeon] after loadContentPage: " + url + ", redirectUrl: " + redirectUrl + "\n");
       return contentPage;
     });
   },

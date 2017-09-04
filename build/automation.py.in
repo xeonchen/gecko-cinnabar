@@ -259,6 +259,8 @@ class Automation(object):
       except:
         self.log.info("Failed determine available memory, disabling ASan low-memory configuration")
 
+    env['MOZ_LOG'] = 'timestamp,rotate:200,nsJarProtocol:5,URILoader:5'
+
     return env
 
   def killPid(self, pid):

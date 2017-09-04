@@ -27,8 +27,13 @@ Cu.import("resource://gre/modules/Services.jsm");
 
 var baseURL = "http://mochi.test:8888/chrome/dom/tests/mochitest/beacon/";
 
+function log(msg) {
+  dump("[xeon] " + msg + "\n");
+}
+
 function whenDelayedStartupFinished(aWindow, aCallback) {
   Services.obs.addObserver(function observer(aSubject, aTopic) {
+    log("browser-delayed-startup-finished callback");
     if (aWindow == aSubject) {
       Services.obs.removeObserver(observer, aTopic);
       setTimeout(aCallback, 0);
@@ -37,6 +42,7 @@ function whenDelayedStartupFinished(aWindow, aCallback) {
 }
 
 function testOnWindow(options, callback) {
+  log("testOnWindow");
   var mainWindow = window.QueryInterface(Ci.nsIInterfaceRequestor)
                          .getInterface(Ci.nsIWebNavigation)
                          .QueryInterface(Ci.nsIDocShellTreeItem)
@@ -47,7 +53,9 @@ function testOnWindow(options, callback) {
   var win = mainWindow.OpenBrowserWindow(options);
   windowsToClose.push(win);
   whenDelayedStartupFinished(win, function() {
+    log("before callback");
     callback(win);
+    log("after callback");
   });
 };
 

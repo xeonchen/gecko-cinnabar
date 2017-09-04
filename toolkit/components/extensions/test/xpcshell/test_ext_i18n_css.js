@@ -23,17 +23,23 @@ createAppInfo("xpcshell@tests.mozilla.org", "XPCShell", "1", "42");
 let extensionData = {
   background: function() {
     function backgroundFetch(url) {
+      dump("[xeon] backgroundFetch " + url + "\n");
       return new Promise((resolve, reject) => {
         let xhr = new XMLHttpRequest();
         xhr.overrideMimeType("text/plain");
+        dump("[xeon] backgroundFetch::open " + url + "\n");
         xhr.open("GET", url);
-        xhr.onload = () => { resolve(xhr.responseText); };
+        xhr.onload = () => {
+          dump("[xeon] backgroundFetch::onload " + url + "\n");
+          resolve(xhr.responseText);
+        };
         xhr.onerror = reject;
         xhr.send();
       });
     }
 
     Promise.all([backgroundFetch("foo.css"), backgroundFetch("bar.CsS?x#y"), backgroundFetch("foo.txt")]).then(results => {
+      dump("[xeon] Promise.all foo.css/bar.CsS?x#y/foo.txt\n");
       browser.test.assertEq("body { max-width: 42px; }", results[0], "CSS file localized");
       browser.test.assertEq("body { max-width: 42px; }", results[1], "CSS file localized");
 
@@ -42,6 +48,7 @@ let extensionData = {
       browser.test.notifyPass("i18n-css");
     });
 
+    dump("[xeon] browser.test.sendMessage('ready', " + browser.runtime.getURL("foo.css") + ");\n");
     browser.test.sendMessage("ready", browser.runtime.getURL("foo.css"));
   },
 
@@ -79,10 +86,17 @@ let extensionData = {
 
 async function test_i18n_css(options = {}) {
   extensionData.useAddonManager = options.useAddonManager;
+  dump("[xeon] before ExtensionTestUtils.loadExtension\n");
   let extension = ExtensionTestUtils.loadExtension(extensionData);
+  dump("[xeon] after ExtensionTestUtils.loadExtension\n");
 
+  dump("[xeon] before extension.startup\n");
   await extension.startup();
+  dump("[xeon] after extension.startup\n");
+
+  dump("[xeon] before extension.awaitMessage\n");
   let cssURL = await extension.awaitMessage("ready");
+  dump("[xeon] after extension.awaitMessage " + cssURL + "\n");
 
   function fetch(url) {
     return new Promise((resolve, reject) => {
@@ -99,15 +113,27 @@ async function test_i18n_css(options = {}) {
 
   equal(css, "body { max-width: 42px; }", "CSS file localized in mochitest scope");
 
+  dump("[xeon] before ExtensionTestUtils.loadContentPage\n");
   let contentPage = await ExtensionTestUtils.loadContentPage(`${BASE_URL}/file_sample.html`);
+  dump("[xeon] ExtensionTestUtils.loadContentPage = <<<" + contentPage + ">>>\n");
 
   let maxWidth = await ContentTask.spawn(contentPage.browser, {}, async function() {
+    dump("[xeon] readyState = " + content.document.readyState + "\n");
+    dump("[xeon] documentURI = " + content.document.documentURI + "\n");
+
     /* globals content */
+    dump("[xeon] body=" + content.document.body.innerHTML + "\n");
     let style = content.getComputedStyle(content.document.body);
+
+    // for (let k in style) {
+    //   dump("[xeon] k = " + k + "\n");
+    //   dump("[xeon] v = " + style[k] + "\n");
+    // }
 
     return style.maxWidth;
   });
 
+  dump("[xeon] maxWidth = " + maxWidth + "\n");
   equal(maxWidth, "42px", "stylesheet correctly applied");
 
   await contentPage.close();

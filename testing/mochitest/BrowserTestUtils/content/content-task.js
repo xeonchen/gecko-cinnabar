@@ -14,6 +14,9 @@ addMessageListener("content-task:spawn", function (msg) {
   let id = msg.data.id;
   let source = msg.data.runnable || "()=>{}";
 
+  let consoleService = Cc["@mozilla.org/consoleservice;1"].getService(Ci.nsIConsoleService);
+  consoleService.logStringMessage("[xeon] content-task:spawn " + id + "\n");
+
   function getStack(aStack) {
     let frames = [];
     for (let frame = aStack; frame; frame = frame.caller) {
