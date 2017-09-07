@@ -210,7 +210,7 @@ LowerPriorityHelper(nsIChannel* aChannel)
 
   nsCOMPtr<nsIClassOfService> cos(do_QueryInterface(aChannel));
   if (cos) {
-    if (nsContentUtils::IsTailingEnabled()) {
+    if (/*nsContentUtils::IsTailingEnabled()*/ true) {
       uint32_t cosFlags = 0;
       cos->GetClassFlags(&cosFlags);
       isBlockingResource = cosFlags & (nsIClassOfService::UrgentStart |
