@@ -378,7 +378,7 @@ FetchDriver::HttpFetch()
     }
   }
 
-  if (mIsTrackingFetch && nsContentUtils::IsTailingEnabled()) {
+  if (mIsTrackingFetch /* && nsContentUtils::IsTailingEnabled() */) {
     cos->AddClassFlags(nsIClassOfService::Throttleable |
                        nsIClassOfService::Tail);
   }
