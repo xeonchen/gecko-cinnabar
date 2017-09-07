@@ -1067,7 +1067,7 @@ ScriptLoader::StartLoad(ScriptLoadRequest* aRequest)
       // synchronous head scripts block loading of most other non js/css
       // content such as images, Leader implicitely disallows tailing
       cos->AddClassFlags(nsIClassOfService::Leader);
-    } else if (defer && (!async || !nsContentUtils::IsTailingEnabled())) {
+    } else if (defer && (!async /*|| !nsContentUtils::IsTailingEnabled()*/)) {
       // Bug 1395525 and the !nsContentUtils::IsTailingEnabled() bit:
       // We want to make sure that turing tailing off by the pref makes
       // the browser behave exactly the same way as before landing
