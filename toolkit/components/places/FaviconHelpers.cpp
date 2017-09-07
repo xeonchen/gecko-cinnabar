@@ -594,7 +594,7 @@ AsyncFetchAndSetIconForPage::FetchFromNetwork() {
     priorityChannel->AdjustPriority(nsISupportsPriority::PRIORITY_LOWEST);
   }
 
-  if (nsContentUtils::IsTailingEnabled()) {
+  /*if (nsContentUtils::IsTailingEnabled())*/ {
     nsCOMPtr<nsIClassOfService> cos = do_QueryInterface(channel);
     if (cos) {
       cos->AddClassFlags(nsIClassOfService::Tail |
