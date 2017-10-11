@@ -722,6 +722,9 @@ nsJARChannel::SetContentLength(int64_t aContentLength)
 NS_IMETHODIMP
 nsJARChannel::Open(nsIInputStream **stream)
 {
+    NS_WARNING("nsJARChannel::Open shouldn't be called");
+    nsTraceRefcnt::WalkTheStack(stderr);
+
     LOG(("nsJARChannel::Open [this=%p]\n", this));
 
     NS_ENSURE_TRUE(!mOpened, NS_ERROR_IN_PROGRESS);
