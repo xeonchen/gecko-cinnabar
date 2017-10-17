@@ -771,6 +771,7 @@ mozJSComponentLoader::ObjectForLocation(ComponentLoaderInfo& aInfo,
             rv = aInfo.EnsureScriptChannel();
             NS_ENSURE_SUCCESS(rv, rv);
             nsCOMPtr<nsIInputStream> scriptStream;
+            // xeon: actually here
             rv = NS_MaybeOpenChannelUsingOpen2(aInfo.ScriptChannel(),
                    getter_AddRefs(scriptStream));
             NS_ENSURE_SUCCESS(rv, rv);

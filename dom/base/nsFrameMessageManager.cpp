@@ -1635,6 +1635,7 @@ nsMessageManagerScriptExecutor::TryCacheLoadAndCompileScript(
     }
 
     nsCOMPtr<nsIInputStream> input;
+    // xeon: here
     rv = channel->Open2(getter_AddRefs(input));
     NS_ENSURE_SUCCESS_VOID(rv);
     nsString dataString;

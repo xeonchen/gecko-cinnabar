@@ -114,6 +114,7 @@ nsStringBundle::LoadProperties()
     // It's a string bundle.  We expect a text/plain type, so set that as hint
     channel->SetContentType(NS_LITERAL_CSTRING("text/plain"));
 
+    // xeon: here
     rv = channel->Open2(getter_AddRefs(in));
     if (NS_FAILED(rv)) return rv;
   }

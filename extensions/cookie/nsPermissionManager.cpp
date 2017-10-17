@@ -2862,6 +2862,7 @@ nsPermissionManager::ImportDefaults()
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<nsIInputStream> inputStream;
+  // xeon: here
   rv = channel->Open2(getter_AddRefs(inputStream));
   NS_ENSURE_SUCCESS(rv, rv);
 

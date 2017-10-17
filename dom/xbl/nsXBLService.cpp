@@ -1113,6 +1113,7 @@ nsXBLService::FetchBindingDocument(nsIContent* aBoundElement, nsIDocument* aBoun
 
   // Now do a blocking synchronous parse of the file.
   nsCOMPtr<nsIInputStream> in;
+  // xeon: here
   rv = channel->Open2(getter_AddRefs(in));
   NS_ENSURE_SUCCESS(rv, rv);
 

@@ -2269,6 +2269,7 @@ nsresult NS_MaybeOpenChannelUsingOpen2(nsIChannel* aChannel,
 {
   nsCOMPtr<nsILoadInfo> loadInfo = aChannel->GetLoadInfo();
   if (loadInfo && loadInfo->GetSecurityMode() != 0) {
+    // xeon: here
     return aChannel->Open2(aStream);
   }
   return aChannel->Open(aStream);

@@ -527,6 +527,7 @@ mozJSSubScriptLoader::ReadScript(nsIURI* uri,
 
     if (NS_SUCCEEDED(rv)) {
         chan->SetContentType(NS_LITERAL_CSTRING("application/javascript"));
+        // xeon: here
         rv = chan->Open2(getter_AddRefs(instream));
     }
 

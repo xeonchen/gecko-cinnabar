@@ -1387,6 +1387,7 @@ Loader::LoadSheet(SheetLoadData* aLoadData,
     }
 
     nsCOMPtr<nsIInputStream> stream;
+    // xeon: here
     rv = channel->Open2(getter_AddRefs(stream));
 
     if (NS_FAILED(rv)) {
