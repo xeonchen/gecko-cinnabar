@@ -18,7 +18,9 @@
 #include "nsISupportsUtils.h"
 #include "prio.h"
 #include "plstr.h"
+#include "mozilla/ClearOnShutdown.h"
 #include "mozilla/Logging.h"
+#include "mozilla/RefCounted.h"
 #include "mozilla/UniquePtrExtensions.h"
 #include "stdlib.h"
 #include "nsWildCard.h"
@@ -78,8 +80,18 @@ static uint32_t HashName(const char* aName, uint16_t nameLen);
 static nsresult ResolveSymlink(const char *path);
 #endif
 
-class ZipArchiveLogger {
+class ZipArchiveLogger : public RefCounted<ZipArchiveLogger>
+{
 public:
+  MOZ_DECLARE_REFCOUNTED_TYPENAME(ZipArchiveLogger)
+
+  ~ZipArchiveLogger() {
+    if (fd) {
+      PR_Close(fd);
+      fd = nullptr;
+    }
+  }
+
   void Write(const nsACString &zip, const char *entry) const {
     if (!fd) {
       char *env = PR_GetEnv("MOZ_JAR_LOG_FILE");
@@ -126,24 +138,10 @@ public:
     PR_Write(fd, buf.get(), buf.Length());
   }
 
-  void AddRef() {
-    MOZ_ASSERT(refCnt >= 0);
-    ++refCnt;
-  }
-
-  void Release() {
-    MOZ_ASSERT(refCnt > 0);
-    if ((0 == --refCnt) && fd) {
-      PR_Close(fd);
-      fd = nullptr;
-    }
-  }
-private:
-  int refCnt;
   mutable PRFileDesc *fd;
 };
 
-static ZipArchiveLogger zipLog;
+static StaticRefPtr<ZipArchiveLogger> gZipLog;
 
 //***********************************************************
 // For every inflation the following allocations are done:
@@ -460,7 +458,7 @@ MOZ_WIN_MEM_TRY_BEGIN
           (!memcmp(aEntryName, item->Name(), len))) {
 
         // Successful GetItem() is a good indicator that the file is about to be read
-        zipLog.Write(mURI, aEntryName);
+        mLogger->Write(mURI, aEntryName);
         return item; //-- found it
       }
       item = item->next;
@@ -951,7 +949,13 @@ nsZipArchive::nsZipArchive()
   , mCommentLen(0)
   , mBuiltSynthetics(false)
 {
-  zipLog.AddRef();
+  if (!gZipLog) {
+    MOZ_ASSERT(NS_IsMainThread());
+    RefPtr<ZipArchiveLogger> logger(new ZipArchiveLogger());
+    gZipLog = logger.forget();
+    ClearOnShutdown(&gZipLog, ShutdownPhase::Last);
+  }
+  mLogger = gZipLog;
 
   // initialize the table to nullptr
   memset(mFiles, 0, sizeof(mFiles));
@@ -963,8 +967,6 @@ NS_IMPL_RELEASE(nsZipArchive)
 nsZipArchive::~nsZipArchive()
 {
   CloseArchive();
-
-  zipLog.Release();
 }
 
 

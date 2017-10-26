@@ -92,6 +92,7 @@ public:
 };
 
 class nsZipHandle;
+class ZipArchiveLogger;
 
 /**
  * nsZipArchive -- a class for reading the PKZIP file format.
@@ -233,6 +234,8 @@ private:
 
   // file URI, for logging
   nsCString mURI;
+
+  RefPtr<ZipArchiveLogger> mLogger;
 
 private:
   //--- private methods ---
