@@ -103,7 +103,7 @@ list of valid flavors.
 # Try run will then put a download link for all log files
 # on tbpl.mozilla.org.
 
-MOZ_LOG = ""
+MOZ_LOG = "timestamp,rotate:200,nsHttp:5,nsJarProtocol:5,nsJarProtocolHandler:5,nsThreadPool:5"
 
 #####################
 # Test log handling #
