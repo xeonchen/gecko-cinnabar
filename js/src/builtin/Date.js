@@ -37,6 +37,10 @@
 var dateTimeFormatCache = new Record();
 
 
+function log(msg) {
+    DumpMessage("[xeon] " + msg);
+}
+
 /**
  * Get a cached DateTimeFormat formatter object, created like so:
  *
@@ -52,23 +56,28 @@ function GetCachedFormat(format, required, defaults) {
            "unexpected format key: please update the comment by " +
            "dateTimeFormatCache");
 
+    log("GetCachedFormat: " + format + " " + required + " " + defaults);
     var formatters;
     if (!IsRuntimeDefaultLocale(dateTimeFormatCache.runtimeDefaultLocale) ||
         !intl_isDefaultTimeZone(dateTimeFormatCache.icuDefaultTimeZone))
     {
+        log("br1");
         formatters = dateTimeFormatCache.formatters = new Record();
         dateTimeFormatCache.runtimeDefaultLocale = RuntimeDefaultLocale();
         dateTimeFormatCache.icuDefaultTimeZone = intl_defaultTimeZone();
     } else {
+        log("br2");
         formatters = dateTimeFormatCache.formatters;
     }
 
+    log("dateTimeFormatCache.icuDefaultTimeZone = " + dateTimeFormatCache.icuDefaultTimeZone);
     var fmt = formatters[format];
     if (fmt === undefined) {
         var options = ToDateTimeOptions(undefined, required, defaults);
         fmt = formatters[format] = intl_DateTimeFormat(undefined, options);
     }
 
+    log("fmt: " + fmt);
     return fmt;
 }
 
