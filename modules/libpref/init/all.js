@@ -5887,7 +5887,7 @@ pref("general.document_open_conversion_depth_limit", 20);
 pref("dom.event.default_to_passive_touch_listeners", true);
 
 // Enable FastBlock?
-pref("browser.fastblock.enabled", false);
+pref("browser.fastblock.enabled", true);
 // The timeout (ms) since navigation start, all tracker connections been made
 // after this timeout will be canceled.
 pref("browser.fastblock.timeout", 5000);
