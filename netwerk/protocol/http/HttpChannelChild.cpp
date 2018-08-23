@@ -746,10 +746,10 @@ HttpChannelChild::DoOnStartRequest(nsIRequest* aRequest, nsISupports* aContext)
   }
 
   bool isTracker;
-  if (NS_SUCCEEDED(mLoadInfo->GetIsTracker(&isTracker)) && isTracker) {
+  MOZ_ALWAYS_SUCCEEDS(mLoadInfo->GetIsTracker(&isTracker));
+  if (isTracker) {
     bool isTrackerBlocked;
-    Unused << mLoadInfo->GetIsTrackerBlocked(&isTrackerBlocked);
-
+    MOZ_ALWAYS_SUCCEEDS(mLoadInfo->GetIsTrackerBlocked(&isTrackerBlocked));
     LOG(("HttpChannelChild::DoOnStartRequest FastBlock %d [this=%p]\n",
          isTrackerBlocked,
          this));
@@ -757,8 +757,10 @@ HttpChannelChild::DoOnStartRequest(nsIRequest* aRequest, nsISupports* aContext)
     nsCOMPtr<nsIDocument> doc;
     if (!NS_WARN_IF(NS_FAILED(GetTopDocument(this,
                                              getter_AddRefs(doc))))) {
-
-      doc->IncrementTrackerCount(isTrackerBlocked);
+      doc->IncrementTrackerCount();
+      if (isTrackerBlocked) {
+        doc->IncrementTrackerBlockedCount();
+      }
     }
   }
 
