@@ -711,6 +711,19 @@ nsHttpChannel::CheckFastBlocked()
         return false;
     }
 
+    nsresult rv;
+    nsCOMPtr<nsIURI> topWindowURI;
+    rv = GetTopWindowURI(getter_AddRefs(topWindowURI));
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+        return false;
+    }
+
+    bool isAllowListed = false;
+    rv = AntiTrackingCommon::IsOnContentBlockingAllowList(topWindowURI, isAllowListed);
+    if (NS_WARN_IF(NS_FAILED(rv)) || isAllowListed) {
+        return false;
+    }
+
     if (!sIsContentBlockingEnabled || !sIsFastBlockEnabled ||
         IsContentPolicyTypeWhitelistedForFastBlock(mLoadInfo) ||
         !timestamp) {
