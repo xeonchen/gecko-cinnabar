@@ -736,6 +736,7 @@ nsHttpChannel::CheckFastBlocked()
     TimeStamp timestamp;
     if (NS_FAILED(GetNavigationStartTimeStamp(&timestamp)) || !timestamp) {
         LOG(("FastBlock passed (no timestamp) [this=%p]\n", this));
+        printf_stderr("[xeon] FastBlock passed (no timestamp) [this=%p]\n", this);
 
         return false;
     }
@@ -747,6 +748,7 @@ nsHttpChannel::CheckFastBlocked()
         (mLoadInfo && mLoadInfo->GetDocumentHasUserInteracted())) {
 
         LOG(("FastBlock passed (invalid) [this=%p]\n", this));
+        printf_stderr("[xeon] FastBlock passed (invalid) [this=%p]\n", this);
     } else {
         TimeDuration duration = TimeStamp::NowLoRes() - timestamp;
         bool hasFastBlockStarted = duration.ToMilliseconds() >= sFastBlockTimeout;
@@ -759,6 +761,11 @@ nsHttpChannel::CheckFastBlocked()
              static_cast<int>(hasFastBlockStopped),
              duration.ToMilliseconds(),
              this));
+        printf_stderr("[xeon] FastBlock started=%d stopped=%d (%lf) [this=%p]\n",
+             static_cast<int>(hasFastBlockStarted),
+             static_cast<int>(hasFastBlockStopped),
+             duration.ToMilliseconds(),
+            this);
         engageFastBlock = hasFastBlockStarted && !hasFastBlockStopped;
     }
 

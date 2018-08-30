@@ -2,8 +2,13 @@
 <html>
 <head>
   <title></title>
+  <script type="application/javascript">
+    function onPageLoad() {
+      dump("[xeon] ONLOAD!!!!!!!!!!!!!\n");
+    }
+  </script>
 </head>
-<body>
+<body onload="onPageLoad();">
   <!-- Tracking iframe contains some trackers -->
   <iframe id="fastIFrame" data-touched="not sure" src="http://tracking.example.org/chrome/toolkit/components/url-classifier/tests/mochitest/fastblock_iframe.html" onload="this.dataset.touched='yes';" onerror="this.dataset.touched='no';"></iframe>
 

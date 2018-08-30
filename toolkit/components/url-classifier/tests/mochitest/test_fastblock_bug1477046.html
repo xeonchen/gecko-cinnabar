@@ -77,7 +77,7 @@ const gSlowTrackers = [
 const gRedirectTracker =
   "http://example.com/chrome/toolkit/components/url-classifier/tests/mochitest/redirect_tracker.sjs";
 const gInfiniteTimeout = 300000;
-const gDebug = false;
+const gDebug = true;
 
 function log(aMsg) {
   if (gDebug) {
@@ -87,16 +87,22 @@ function log(aMsg) {
 
 function awaitBrowserLoaded(browser) {
   return ContentTask.spawn(browser, null, () => {
+    dump("[xeon] awaitBrowserLoaded [spawn]\n");
     if (content.document.readyState !== "complete" ||
         content.document.documentURI === "about:blank") {
+      dump("[xeon] awaitBrowserLoaded [wait]\n");
       return ContentTaskUtils.waitForEvent(this, "load", true, event => {
+        dump("[xeon] awaitBrowserLoaded [event1]\n");
         return content.document.documentURI !== "about:blank";
       }).then(() => {
+        dump("[xeon] awaitBrowserLoaded [done]\n");
         return ContentTaskUtils.waitForCondition(() => {
+          dump("[xeon] awaitBrowserLoaded [event2]\n");
           return content.document.readyState === "complete";
         }, "page load complete", 100, 600); // wait for ~60s
       });
     }
+    dump("[xeon] awaitBrowserLoaded [complete]\n");
     return Promise.resolve();
   });
 }
