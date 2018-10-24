@@ -53,6 +53,9 @@ namespace JS {
 extern JS_PUBLIC_API(void)
 ResetTimeZone();
 
+extern JS_PUBLIC_API(void)
+SetSpoofTimeZone(bool aEnabled);
+
 class ClippedTime;
 inline ClippedTime TimeClip(double time);
 

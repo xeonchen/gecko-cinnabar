@@ -802,47 +802,7 @@ nsRFPService::UpdateRFPPref()
 
   UpdateTimers();
 
-  if (sPrivacyResistFingerprinting) {
-    PR_SetEnv("TZ=UTC");
-  } else if (sInitialized) {
-    // We will not touch the TZ value if 'privacy.resistFingerprinting' is false during
-    // the time of initialization.
-    if (!mInitialTZValue.IsEmpty()) {
-      nsAutoCString tzValue = NS_LITERAL_CSTRING("TZ=") + mInitialTZValue;
-      static char* tz = nullptr;
-
-      // If the tz has been set before, we free it first since it will be allocated
-      // a new value later.
-      if (tz) {
-        free(tz);
-      }
-      // PR_SetEnv() needs the input string been leaked intentionally, so
-      // we copy it here.
-      tz = ToNewCString(tzValue);
-      if (tz) {
-        PR_SetEnv(tz);
-      }
-    } else {
-#if defined(XP_WIN)
-      // For Windows, we reset the TZ to an empty string. This will make Windows to use
-      // its system timezone.
-      PR_SetEnv("TZ=");
-#else
-      // For POSIX like system, we reset the TZ to the /etc/localtime, which is the
-      // system timezone.
-      PR_SetEnv("TZ=:/etc/localtime");
-#endif
-    }
-  }
-
-  // localtime_r (and other functions) may not call tzset, so do this here after
-  // changing TZ to ensure all <time.h> functions use the new time zone.
-#if defined(XP_WIN)
-  _tzset();
-#else
-  tzset();
-#endif
-
+  nsJSUtils::SetSpoofTimeZone(sPrivacyResistFingerprinting);
   nsJSUtils::ResetTimeZone();
 }
 

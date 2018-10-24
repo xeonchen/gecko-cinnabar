@@ -126,6 +126,8 @@ static Atomic<JS::ReduceMicrosecondTimePrecisionCallback, Relaxed> sReduceMicros
 namespace
 {
 
+bool gSpoofTimeZone = true;
+
 class DateTimeHelper
 {
   private:
@@ -503,6 +505,10 @@ DateTimeHelper::localTZA(double t, DateTimeInfo::TimeZoneOffset offset)
 {
     MOZ_ASSERT(IsFinite(t));
 
+    if (gSpoofTimeZone) {
+        return 0;
+    }
+
     int64_t milliseconds = static_cast<int64_t>(t);
     int32_t offsetMilliseconds = DateTimeInfo::getOffsetMilliseconds(milliseconds, offset);
     return static_cast<double>(offsetMilliseconds);
@@ -593,6 +599,10 @@ DateTimeHelper::daylightSavingTA(double t)
         return GenericNaN();
     }
 
+    if (gSpoofTimeZone) {
+        return 0.0f;
+    }
+
     /*
      * If earlier than 1970 or after 2038, potentially beyond the ken of
      * many OSes, map it to an equivalent year before asking.
@@ -611,6 +621,10 @@ DateTimeHelper::daylightSavingTA(double t)
 double
 DateTimeHelper::adjustTime(double date)
 {
+    if (gSpoofTimeZone) {
+        return 0;
+    }
+
     double localTZA = DateTimeInfo::localTZA();
     double t = daylightSavingTA(date) + localTZA;
     t = (localTZA >= 0) ? fmod(t, msPerDay) : -fmod(msPerDay - t, msPerDay);
@@ -2043,6 +2057,10 @@ date_getUTCMilliseconds(JSContext* cx, unsigned argc, Value* vp)
 /* static */ MOZ_ALWAYS_INLINE bool
 DateObject::getTimezoneOffset_impl(JSContext* cx, const CallArgs& args)
 {
+    if (gSpoofTimeZone) {
+        return 0;
+    }
+
     DateObject* dateObj = &args.thisv().toObject().as<DateObject>();
     double utctime = dateObj->UTCTime().toNumber();
     double localtime = dateObj->cachedLocalTime();
@@ -2913,6 +2931,7 @@ DateTimeHelper::timeZoneComment(JSContext* cx, double utcTime, double localTime)
         JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr, JSMSG_DEFAULT_LOCALE_ERROR);
         return nullptr;
     }
+    // printf_stderr("[xeon] locale=%s\n", locale);
 
     char16_t tzbuf[100];
     tzbuf[0] = ' ';
@@ -3128,6 +3147,7 @@ ToLocaleFormatHelper(JSContext* cx, HandleObject obj, const char* format, Mutabl
         strcpy(buf, js_InvalidDate_str);
     } else {
         double localTime = LocalTime(utcTime);
+        dprintf_stderr("[xeon] utcTime=%lf, localTime=%lf\n", utcTime, localTime);
 
         /* Let PRMJTime format it. */
         size_t result_len = DateTimeHelper::formatTime(buf, sizeof buf, format, utcTime, localTime);

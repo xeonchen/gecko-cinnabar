@@ -219,6 +219,7 @@ public:
                                   JS::AutoObjectVector& aScopeChain);
 
   static void ResetTimeZone();
+  static void SetSpoofTimeZone(bool aEnabled);
 };
 
 template<typename T>

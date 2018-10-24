@@ -60,6 +60,8 @@ const Class DateTimeFormatObject::class_ = {
     &DateTimeFormatObject::classOps_
 };
 
+bool gSpoofTimeZone = true;
+
 static bool
 dateTimeFormat_toSource(JSContext* cx, unsigned argc, Value* vp)
 {

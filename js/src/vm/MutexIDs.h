@@ -61,7 +61,9 @@
   _(WasmCodeSegmentMap,          600) \
   _(WasmDeferredValidation,      600) \
   _(TraceLoggerGraphState,       600) \
-  _(VTuneLock,                   600)
+  _(VTuneLock,                   600) \
+                                      \
+  _(SpoofTimeZoneMutex,          700)
 
 namespace js {
 namespace mutexid {

@@ -80,6 +80,7 @@ function GetCachedFormat(format, required, defaults) {
  * Spec: ECMAScript Internationalization API Specification, 13.3.1.
  */
 function Date_toLocaleString() {
+    DumpMessage("[xeon] Date_toLocaleString");
     // Steps 1-2.  Note that valueOf enforces "this time value" restrictions.
     var x = callFunction(std_Date_valueOf, this);
     if (Number_isNaN(x))

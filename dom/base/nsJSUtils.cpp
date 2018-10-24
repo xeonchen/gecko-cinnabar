@@ -622,6 +622,14 @@ nsJSUtils::ResetTimeZone()
   JS::ResetTimeZone();
 }
 
+// static
+void
+nsJSUtils::SetSpoofTimeZone(bool aEnabled)
+{
+  JS::SetSpoofTimeZone(aEnabled);
+}
+
+
 //
 // nsDOMJSUtils.h
 //

@@ -39,9 +39,15 @@
 #include "util/Text.h"
 #include "vm/MutexIDs.h"
 
+bool gSpoofTimeZone = true;
+
 static bool
 ComputeLocalTime(time_t local, struct tm* ptm)
 {
+    if (gSpoofTimeZone) {
+        return false;
+    }
+
 #if defined(_WIN32)
     return localtime_s(ptm, &local) == 0;
 #elif defined(HAVE_LOCALTIME_R)
@@ -59,6 +65,10 @@ ComputeLocalTime(time_t local, struct tm* ptm)
 static bool
 ComputeUTCTime(time_t t, struct tm* ptm)
 {
+    if (gSpoofTimeZone) {
+        return false;
+    }
+
 #if defined(_WIN32)
     return gmtime_s(ptm, &t) == 0;
 #elif defined(HAVE_GMTIME_R)
@@ -512,6 +522,9 @@ js::DateTimeInfo::instance;
 /* static */ js::ExclusiveData<js::IcuTimeZoneStatus>*
 js::IcuTimeZoneState;
 
+/* static */ js::ExclusiveData<bool>*
+js::SpoofTimeZone;
+
 bool
 js::InitDateTimeState()
 {
@@ -539,12 +552,26 @@ js::InitDateTimeState()
         return false;
     }
 
+    MOZ_ASSERT(!SpoofTimeZone,
+               "we should be initializing only once");
+    SpoofTimeZone = js_new<ExclusiveData<bool>>(mutexid::SpoofTimeZoneMutex, false);
+    if (!SpoofTimeZone) {
+        js_delete(DateTimeInfo::instance);
+        DateTimeInfo::instance = nullptr;
+        js_delete(IcuTimeZoneState);
+        IcuTimeZoneState = nullptr;
+        return false;
+    }
+
     return true;
 }
 
 /* static */ void
 js::FinishDateTimeState()
 {
+    js_delete(SpoofTimeZone);
+    SpoofTimeZone = nullptr;
+
     js_delete(IcuTimeZoneState);
     IcuTimeZoneState = nullptr;
 
@@ -570,7 +597,20 @@ js::ResetTimeZoneInternal(ResetTimeZoneMode mode)
 JS_PUBLIC_API(void)
 JS::ResetTimeZone()
 {
+    // TODO: update RFP pref
+    // bool isResistFingerprintingEnabled = mozilla::nsRFPService::IsResistFingerprintingEnabled();
     js::ResetTimeZoneInternal(js::ResetTimeZoneMode::ResetEvenIfOffsetUnchaged);
+}
+
+JS_PUBLIC_API(void)
+JS::SetSpoofTimeZone(bool aEnabled)
+{
+#if ENABLE_INTL_API
+    auto guard = js::SpoofTimeZone->lock();
+    guard.get() = aEnabled;
+#else
+    mozilla::Unused << aEnabled;
+#endif
 }
 
 #if defined(XP_WIN)
@@ -772,7 +812,8 @@ js::ResyncICUDefaultTimeZone()
     if (guard.get() == IcuTimeZoneStatus::NeedsUpdate) {
         bool recreate = true;
 
-        if (const char* tz = std::getenv("TZ")) {
+        const char* tz = gSpoofTimeZone ? "Etc/GMT" : std::getenv("TZ");
+        if (tz) {
             icu::UnicodeString tzid;
 
 #if defined(XP_WIN)

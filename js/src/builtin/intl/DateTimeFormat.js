@@ -250,7 +250,16 @@ var timeZoneCache = {
  *
  * ES2017 Intl draft rev 4a23f407336d382ed5e3471200c690c9b020b5f3
  */
+
+var gSpoofTimeZone = true;
+
 function DefaultTimeZone() {
+    DumpMessage("[xeon] DefaultTimeZone: gSpoofTimeZone=" + gSpoofTimeZone);
+
+    if (gSpoofTimeZone) {
+        return "UTC";
+    }
+
     if (intl_isDefaultTimeZone(timeZoneCache.icuDefaultTimeZone))
         return timeZoneCache.defaultTimeZone;
 

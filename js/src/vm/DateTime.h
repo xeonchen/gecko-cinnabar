@@ -311,6 +311,9 @@ enum class IcuTimeZoneStatus { Valid, NeedsUpdate };
 extern ExclusiveData<IcuTimeZoneStatus>*
 IcuTimeZoneState;
 
+extern ExclusiveData<bool>*
+SpoofTimeZone;
+
 /**
  * ICU's default time zone, used for various date/time formatting operations
  * that include the local time in the representation, is allowed to go stale
