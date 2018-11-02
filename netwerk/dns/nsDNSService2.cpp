@@ -57,6 +57,7 @@ static const char kPrefDnsForceResolve[]     = "network.dns.forceResolve";
 static const char kPrefDnsOfflineLocalhost[] = "network.dns.offline-localhost";
 static const char kPrefDnsNotifyResolution[] = "network.dns.notifyResolution";
 static const char kPrefNetworkProxyType[]    = "network.proxy.type";
+static const char kPrefNetworkNoProxyOn[]    = "network.proxy.no_proxies_on";
 
 //-----------------------------------------------------------------------------
 
@@ -881,6 +882,16 @@ nsDNSService::AsyncResolveInternal(const nsACString        &aHostname,
         NS_DispatchToMainThread(new NotifyDNSResolution(aHostname));
     }
 
+    // Bug 1361337: strictly disable DNS lookup
+    if (StaticPrefs::network_proxy_socks_remote_dns()) {
+        PRNetAddr tempAddr;
+        memset(&tempAddr, 0, sizeof(PRNetAddr));
+
+        if (PR_StringToNetAddr(aHostname.BeginReading(), &tempAddr) != PR_SUCCESS) {
+            return NS_ERROR_UNKNOWN_PROXY_HOST;
+        }
+    }
+
     if (!res)
         return NS_ERROR_OFFLINE;
 
@@ -1180,6 +1191,16 @@ nsDNSService::ResolveInternal(const nsACString        &aHostname,
     if (GetOffline() &&
         (!mOfflineLocalhost || !hostname.LowerCaseEqualsASCII("localhost"))) {
         flags |= RESOLVE_OFFLINE;
+    }
+
+    // Bug 1361337: strictly disable DNS lookup
+    if (StaticPrefs::network_proxy_socks_remote_dns()) {
+        PRNetAddr tempAddr;
+        memset(&tempAddr, 0, sizeof(PRNetAddr));
+
+        if (PR_StringToNetAddr(aHostname.BeginReading(), &tempAddr) != PR_SUCCESS) {
+            return NS_ERROR_UNKNOWN_PROXY_HOST;
+        }
     }
 
     //

@@ -1613,6 +1613,13 @@ VARCACHE_PREF(
   bool, false
 )
 
+// Proxy
+VARCACHE_PREF(
+  "network.proxy.socks_remote_dns",
+  network_proxy_socks_remote_dns,
+  RelaxedAtomicBool, false
+)
+
 //---------------------------------------------------------------------------
 // Preferences prefs
 //---------------------------------------------------------------------------
